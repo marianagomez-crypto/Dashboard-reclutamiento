@@ -42,6 +42,7 @@ Thumbs.db
 
 # Next.js TypeScript declarations (autogenerados)
 **/next-env.d.ts
+**/tsconfig.tsbuildinfo
 
 # Tarballs y backups
 *.tgz
