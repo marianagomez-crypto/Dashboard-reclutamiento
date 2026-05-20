@@ -64,11 +64,13 @@ async function fetchData() {
           0,
         ) / hired.length;
 
+  // Distribución por etapa: SOLO candidatos con Estado Final = "En proceso"
   const stageCounts = STAGES.reduce(
     (acc, s) => ({ ...acc, [s]: 0 }),
     {} as Record<Stage, number>,
   );
-  candidates.forEach((c) => {
+  const inProcess = candidates.filter((c) => c.finalStatus === 'En proceso');
+  inProcess.forEach((c) => {
     if (stageCounts[c.stage] !== undefined) stageCounts[c.stage] += 1;
   });
 
@@ -287,7 +289,11 @@ export default async function DashboardPage() {
       </section>
 
       <section>
-        <StageBarChart data={data.stageBar} />
+        <StageBarChart
+          data={data.stageBar}
+          title="Distribución por etapa · Candidatos en proceso"
+          description={`${data.stageBar.reduce((acc, d) => acc + d.value, 0)} candidatos activos en el pipeline`}
+        />
       </section>
 
     </div>

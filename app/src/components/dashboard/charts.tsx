@@ -273,8 +273,12 @@ export function SourceChart({ data }: { data: { name: string; value: number }[] 
 
 export function StageBarChart({
   data,
+  title = 'Distribución por etapa',
+  description,
 }: {
   data: { stage: string; value: number; color: string }[];
+  title?: string;
+  description?: string;
 }) {
   const total = data.reduce((acc, d) => acc + d.value, 0);
   const max = Math.max(...data.map((d) => d.value), 1);
@@ -284,8 +288,10 @@ export function StageBarChart({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Distribución por etapa</CardTitle>
-        <CardDescription>{total} candidatos en el pipeline</CardDescription>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>
+          {description || `${total} candidatos en el pipeline`}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="h-[360px] w-full rounded-xl bg-muted/40 p-3">
