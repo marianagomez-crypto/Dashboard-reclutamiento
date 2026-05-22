@@ -286,7 +286,7 @@ export class AirtableRepository implements Repository {
       linkedinUrl: str(f, F.candidate.linkedinUrl),
       vacancyId: str(f, F.candidate.vacancyId),
       source: (str(f, F.candidate.source) as Fuente) || 'LinkedIn',
-      appliedAt: str(f, F.candidate.appliedAt) || new Date().toISOString(),
+      appliedAt: str(f, F.candidate.appliedAt) || '',
       recruiter: str(f, F.candidate.recruiter),
       stage: (str(f, F.candidate.stage) as Stage) || 'Screening',
       finalStatus: (str(f, F.candidate.finalStatus) as FinalStatus) || 'En proceso',

@@ -35,34 +35,50 @@ async function fetchData() {
   const twoMonthsAgo = now - 60 * 86_400_000;
 
   const newThisWeek = candidates.filter(
-    (c) => new Date(c.appliedAt).getTime() >= weekAgo,
+    (c) => c.appliedAt && new Date(c.appliedAt).getTime() >= weekAgo,
   ).length;
   const candidatesPrevWeek = candidates.filter((c) => {
+    if (!c.appliedAt) return false;
     const t = new Date(c.appliedAt).getTime();
     return t >= weekAgo - 7 * 86_400_000 && t < weekAgo;
   }).length;
 
   const hired = candidates.filter((c) => c.finalStatus === 'Contratado');
   const hiresThisMonth = hired.filter(
-    (c) => new Date(c.appliedAt).getTime() >= monthAgo,
+    (c) => c.appliedAt && new Date(c.appliedAt).getTime() >= monthAgo,
   ).length;
   const hiresPrevMonth = hired.filter((c) => {
+    if (!c.appliedAt) return false;
     const t = new Date(c.appliedAt).getTime();
     return t >= twoMonthsAgo && t < monthAgo;
   }).length;
-  const rejected = candidates.filter(
-    (c) => c.finalStatus === 'Se cayó' || c.finalStatus === 'No seleccionado',
-  ).length;
+
+  // Conversión MENSUAL — calculada solo con candidatos del último mes
+  // Fórmula: Contratado / (Contratado + Se cayó)
+  // (excluye "No seleccionado" porque es decisión interna de descarte)
+  const inLastMonth = (c: (typeof candidates)[number]) =>
+    c.appliedAt && new Date(c.appliedAt).getTime() >= monthAgo;
+  const hiredThisMonthSet = candidates.filter(
+    (c) => c.finalStatus === 'Contratado' && inLastMonth(c),
+  );
+  const droppedThisMonth = candidates.filter(
+    (c) => c.finalStatus === 'Se cayó' && inLastMonth(c),
+  );
+  const resolvedThisMonth = hiredThisMonthSet.length + droppedThisMonth.length;
   const conversionRate =
-    hired.length + rejected > 0 ? (hired.length / (hired.length + rejected)) * 100 : 0;
+    resolvedThisMonth > 0
+      ? (hiredThisMonthSet.length / resolvedThisMonth) * 100
+      : 0;
+
+  const hiredWithDate = hired.filter((c) => !!c.appliedAt);
   const avgTimeToHireDays =
-    hired.length === 0
+    hiredWithDate.length === 0
       ? 0
-      : hired.reduce(
+      : hiredWithDate.reduce(
           (acc, c) =>
             acc + (Date.now() - new Date(c.appliedAt).getTime()) / 86_400_000,
           0,
-        ) / hired.length;
+        ) / hiredWithDate.length;
 
   // Distribución por etapa: SOLO candidatos con Estado Final = "En proceso"
   const stageCounts = STAGES.reduce(
@@ -252,13 +268,13 @@ export default async function DashboardPage() {
           delay={0.15}
         />
         <KpiCard
-          label="Conversión"
+          label="Conversión / mes"
           value={data.kpi.conversionRate}
           suffix="%"
           icon={<TrendingUp />}
           accent="blue"
           delay={0.2}
-          hint="Resueltos"
+          hint="Últimos 30 d"
         />
         <KpiCard
           label="Time-to-hire"
