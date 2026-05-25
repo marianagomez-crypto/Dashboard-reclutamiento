@@ -4,10 +4,8 @@ import { getRepo } from '@/lib/data/repository';
 import { getSession } from '@/lib/auth/session';
 import {
   AREAS,
-  HIRING_MANAGERS,
   MODALIDADES,
   PRIORITIES,
-  RECRUITERS,
   VACANCY_STATUSES,
 } from '@/lib/types';
 
@@ -17,10 +15,8 @@ const patchSchema = z.object({
   title: z.string().optional(),
   area: z.enum(AREAS as unknown as [string, ...string[]]).optional(),
   seniority: z.string().optional(),
-  recruiter: z.enum(RECRUITERS as unknown as [string, ...string[]]).optional(),
-  hiringManager: z
-    .enum(HIRING_MANAGERS as unknown as [string, ...string[]])
-    .optional(),
+  recruiter: z.string().optional(),
+  hiringManager: z.string().optional(),
   positions: z.number().int().min(1).optional(),
   status: z
     .enum(VACANCY_STATUSES as unknown as [string, ...string[]])
@@ -43,16 +39,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!parsed.success)
     return NextResponse.json({ error: 'Datos invalidos' }, { status: 400 });
 
-  const repo = await getRepo();
-  const v = await repo.updateVacancy(params.id, parsed.data as any);
-  await repo.logActivity({
-    userId: session.sub,
-    userName: session.name,
-    action: 'actualizo una vacante',
-    entity: 'vacante',
-    entityId: v.id,
-  });
-  return NextResponse.json({ data: v });
+  try {
+    const repo = await getRepo();
+    const v = await repo.updateVacancy(params.id, parsed.data as any);
+    await repo.logActivity({
+      userId: session.sub,
+      userName: session.name,
+      action: 'actualizo una vacante',
+      entity: 'vacante',
+      entityId: v.id,
+    });
+    return NextResponse.json({ data: v });
+  } catch (err: any) {
+    console.error('[api/vacancies PATCH]', err);
+    return NextResponse.json(
+      { error: err?.message || 'No se pudo actualizar la vacante' },
+      { status: 500 },
+    );
+  }
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {

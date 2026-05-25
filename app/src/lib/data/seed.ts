@@ -154,7 +154,7 @@ export function seedCandidates(vacancies: Vacancy[]): Candidate[] {
       stage = 'Entrevista T&C';
       finalStatus = 'En proceso';
     } else if (r < 0.6) {
-      stage = 'Entrevista Líder';
+      stage = 'Entrevista líder';
       finalStatus = 'En proceso';
     } else if (r < 0.7) {
       stage = 'Prueba Tecnica';

@@ -43,21 +43,24 @@ import {
 } from '@/components/ui/select';
 import {
   AREAS,
-  HIRING_MANAGERS,
   MODALIDADES,
   PRIORITIES,
-  RECRUITERS,
   STAGE_COLORS,
   STAGES,
   VACANCY_STATUSES,
   type Candidate,
+  type CatalogItem,
   type Vacancy,
 } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
+import { VacancyAgingChart, type VacancyAgingRow } from '@/components/dashboard/charts';
 
 interface Props {
   initialVacancies: Vacancy[];
   candidates: Candidate[];
+  seniorities: CatalogItem[];
+  hiringManagers: CatalogItem[];
+  recruiters: CatalogItem[];
 }
 
 const statusVariant: Record<Vacancy['status'], 'success' | 'warning' | 'outline'> = {
@@ -72,9 +75,20 @@ const priorityVariant: Record<Vacancy['priority'], 'destructive' | 'gold' | 'blu
   Baja: 'blue',
 };
 
-export function VacanciesPage({ initialVacancies, candidates }: Props) {
+export function VacanciesPage({
+  initialVacancies,
+  candidates,
+  seniorities,
+  hiringManagers,
+  recruiters,
+}: Props) {
   const router = useRouter();
   const [vacancies, setVacancies] = React.useState(initialVacancies);
+  // Resincroniza el estado local cuando el server vuelve a renderizar con data nueva
+  // (ej. despues de "Sincronizar con Airtable" en el topbar).
+  React.useEffect(() => {
+    setVacancies(initialVacancies);
+  }, [initialVacancies]);
   const [creating, setCreating] = React.useState(false);
   const [editing, setEditing] = React.useState<Vacancy | null>(null);
   const [viewing, setViewing] = React.useState<Vacancy | null>(null);
@@ -106,6 +120,26 @@ export function VacanciesPage({ initialVacancies, candidates }: Props) {
       ),
     [vacancies, statusFilter, areaFilter],
   );
+
+  // Aging: vacantes ABIERTAS con días transcurridos desde la apertura.
+  // Si el area filter esta activo, lo respeta para mantener coherencia visual.
+  const agingRows: VacancyAgingRow[] = React.useMemo(() => {
+    const now = Date.now();
+    return vacancies
+      .filter((v) => v.status === 'Abierta')
+      .filter((v) => areaFilter === 'all' || v.area === areaFilter)
+      .filter((v) => !!v.openedAt)
+      .map((v) => {
+        const opened = new Date(v.openedAt).getTime();
+        const days = Math.max(0, Math.floor((now - opened) / 86_400_000));
+        return {
+          id: v.id,
+          title: v.title,
+          daysOpen: days,
+          priority: v.priority,
+        };
+      });
+  }, [vacancies, areaFilter]);
 
   async function onCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -199,6 +233,8 @@ export function VacanciesPage({ initialVacancies, candidates }: Props) {
           </Button>
         </div>
       </div>
+
+      <VacancyAgingChart data={agingRows} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {filtered.map((v, i) => (
@@ -304,6 +340,9 @@ export function VacanciesPage({ initialVacancies, candidates }: Props) {
         onSubmit={onCreate}
         title="Nueva vacante"
         submitLabel="Crear"
+        seniorities={seniorities}
+        hiringManagers={hiringManagers}
+        recruiters={recruiters}
       />
 
       {/* EDIT */}
@@ -313,6 +352,9 @@ export function VacanciesPage({ initialVacancies, candidates }: Props) {
         onUpdated={(v) =>
           setVacancies((arr) => arr.map((x) => (x.id === v.id ? { ...x, ...v } : x)))
         }
+        seniorities={seniorities}
+        hiringManagers={hiringManagers}
+        recruiters={recruiters}
       />
 
       {/* VIEW */}
@@ -357,6 +399,9 @@ function VacancyFormDialog({
   title,
   submitLabel,
   initial,
+  seniorities,
+  hiringManagers,
+  recruiters,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -364,6 +409,9 @@ function VacancyFormDialog({
   title: string;
   submitLabel: string;
   initial?: Vacancy | null;
+  seniorities: CatalogItem[];
+  hiringManagers: CatalogItem[];
+  recruiters: CatalogItem[];
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -394,12 +442,19 @@ function VacancyFormDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="seniority">Seniority</Label>
-              <Input
-                id="seniority"
-                name="seniority"
-                defaultValue={initial?.seniority}
-                placeholder="Senior, Jr..."
-              />
+              <Select name="seniority" defaultValue={initial?.seniority || 'none'}>
+                <SelectTrigger>
+                  <SelectValue placeholder="—" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">—</SelectItem>
+                  {seniorities.map((s) => (
+                    <SelectItem key={s.id} value={s.name}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="positions">Plazas</Label>
@@ -419,9 +474,9 @@ function VacancyFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">—</SelectItem>
-                  {RECRUITERS.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
+                  {recruiters.map((r) => (
+                    <SelectItem key={r.id} value={r.name}>
+                      {r.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -435,9 +490,9 @@ function VacancyFormDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">—</SelectItem>
-                  {HIRING_MANAGERS.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
+                  {hiringManagers.map((m) => (
+                    <SelectItem key={m.id} value={m.name}>
+                      {m.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -509,10 +564,16 @@ function EditVacancyDialog({
   vacancy,
   onOpenChange,
   onUpdated,
+  seniorities,
+  hiringManagers,
+  recruiters,
 }: {
   vacancy: Vacancy | null;
   onOpenChange: (o: boolean) => void;
   onUpdated: (v: Vacancy) => void;
+  seniorities: CatalogItem[];
+  hiringManagers: CatalogItem[];
+  recruiters: CatalogItem[];
 }) {
   const router = useRouter();
   if (!vacancy) return null;
@@ -558,6 +619,9 @@ function EditVacancyDialog({
       title={`Editar ${vacancy.id}`}
       submitLabel="Guardar"
       initial={vacancy}
+      seniorities={seniorities}
+      hiringManagers={hiringManagers}
+      recruiters={recruiters}
     />
   );
 }

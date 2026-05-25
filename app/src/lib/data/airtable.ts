@@ -9,6 +9,8 @@ import { env } from '@/lib/env';
 import type {
   ActivityLog,
   Candidate,
+  CatalogItem,
+  CatalogType,
   EtapaResultado,
   FinalStatus,
   Fuente,
@@ -30,6 +32,31 @@ import type {
   Repository,
   VacancyFilter,
 } from './repository';
+
+// Mapeo de los catalogos maestros a sus tablas/campos en Airtable.
+const CATALOG_TABLES: Record<
+  CatalogType,
+  { tableId: string; idField: string; nameField: string; idPrefix: string }
+> = {
+  seniorities: {
+    tableId: 'tbly6jLyGh0zn1J4N',
+    idField: 'ID_Senioritie',
+    nameField: 'Seniority',
+    idPrefix: 'S',
+  },
+  'hiring-managers': {
+    tableId: 'tblvkjugKSzAqwpss',
+    idField: 'ID_Manager',
+    nameField: 'Hiring Manager',
+    idPrefix: 'HM',
+  },
+  recruiters: {
+    tableId: 'tbljOWSjxp2buFBni',
+    idField: 'ID_Reclutador',
+    nameField: 'Reclutador',
+    idPrefix: 'R',
+  },
+};
 import { MockRepository } from './mock';
 
 // ============================================================================
@@ -104,7 +131,8 @@ const F = {
     reviewId: 'ID Revision',
     candidateId: 'ID Candidato',
     cvSentAt: 'Fecha de envio de cv',
-    status: 'Status',
+    returnedAt: 'Fecha de Retorno de CV',
+    headName: 'Nombre del Head',
   },
 };
 
@@ -219,21 +247,40 @@ export class AirtableRepository implements Repository {
     return records[0] ? this.vacancyFromRecord(records[0]) : null;
   }
 
+  // Siguiente ID autoincremental con formato VCNNNN (VC0001, VC0002, ...).
+  // Ignora IDs con otros formatos (ej. VAC-1234) para el calculo del max.
+  private async nextVacancyId(): Promise<string> {
+    const records = await this.selectAll(env.airtable.tables.vacancies);
+    let maxN = 0;
+    for (const r of records) {
+      const idStr = String(r.fields[F.vacancy.id] || '');
+      const m = idStr.match(/^VC(\d{1,})$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    return `VC${String(maxN + 1).padStart(4, '0')}`;
+  }
+
   async createVacancy(data: any) {
-    const newId = `VAC-${Math.floor(1000 + Math.random() * 9000)}`;
-    const r = (await this.base(env.airtable.tables.vacancies).create({
-      [F.vacancy.id]: data.id || newId,
-      [F.vacancy.title]: data.title,
-      [F.vacancy.area]: data.area,
-      [F.vacancy.seniority]: data.seniority,
-      [F.vacancy.recruiter]: data.recruiter,
-      [F.vacancy.hiringManager]: data.hiringManager,
-      [F.vacancy.openedAt]: data.openedAt || new Date().toISOString().slice(0, 10),
-      [F.vacancy.status]: data.status || 'Abierta',
-      [F.vacancy.priority]: data.priority || 'Media',
-      [F.vacancy.modalidad]: data.modalidad,
-      [F.vacancy.positions]: data.positions ?? 1,
-    } as any)) as unknown as Airtable.Record<FieldSet>;
+    const newId = data.id || (await this.nextVacancyId());
+    const r = (await this.base(env.airtable.tables.vacancies).create(
+      {
+        [F.vacancy.id]: newId,
+        [F.vacancy.title]: data.title,
+        [F.vacancy.area]: data.area,
+        [F.vacancy.seniority]: data.seniority,
+        [F.vacancy.recruiter]: data.recruiter,
+        [F.vacancy.hiringManager]: data.hiringManager,
+        [F.vacancy.openedAt]: data.openedAt || new Date().toISOString().slice(0, 10),
+        [F.vacancy.status]: data.status || 'Abierta',
+        [F.vacancy.priority]: data.priority || 'Media',
+        [F.vacancy.modalidad]: data.modalidad,
+        [F.vacancy.positions]: data.positions ?? 1,
+      } as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
     return this.vacancyFromRecord(r);
   }
 
@@ -255,6 +302,7 @@ export class AirtableRepository implements Repository {
     const r = (await this.base(env.airtable.tables.vacancies).update(
       found,
       fields,
+      { typecast: true },
     )) as unknown as Airtable.Record<FieldSet>;
     return this.vacancyFromRecord(r);
   }
@@ -326,18 +374,39 @@ export class AirtableRepository implements Repository {
     return records[0] ? this.candidateFromRecord(records[0]) : null;
   }
 
+  // Calcula el siguiente ID autoincremental con formato CNNNN (C0001, C0002, ...)
+  // Lee todos los IDs existentes, extrae los que matchean el patron CNNNN y
+  // devuelve max+1 con padding a 4 digitos. IDs con otros formatos (ej. CAND-7275)
+  // se ignoran en el calculo.
+  private async nextCandidateId(): Promise<string> {
+    const records = await this.selectAll(env.airtable.tables.candidates);
+    let maxN = 0;
+    for (const r of records) {
+      const idStr = String(r.fields[F.candidate.id] || '');
+      const m = idStr.match(/^C(\d{1,})$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    return `C${String(maxN + 1).padStart(4, '0')}`;
+  }
+
   async createCandidate(data: any) {
-    const newId = `CAND-${Math.floor(2000 + Math.random() * 8000)}`;
-    const r = (await this.base(env.airtable.tables.candidates).create({
-      [F.candidate.id]: data.id || newId,
-      [F.candidate.name]: data.name,
-      [F.candidate.vacancyId]: data.vacancyId,
-      [F.candidate.source]: data.source,
-      [F.candidate.appliedAt]: data.appliedAt || new Date().toISOString().slice(0, 10),
-      [F.candidate.recruiter]: data.recruiter,
-      [F.candidate.stage]: data.stage || 'Screening',
-      [F.candidate.finalStatus]: data.finalStatus || 'En proceso',
-    } as any)) as unknown as Airtable.Record<FieldSet>;
+    const newId = data.id || (await this.nextCandidateId());
+    const r = (await this.base(env.airtable.tables.candidates).create(
+      {
+        [F.candidate.id]: newId,
+        [F.candidate.name]: data.name,
+        [F.candidate.vacancyId]: data.vacancyId,
+        [F.candidate.source]: data.source,
+        [F.candidate.appliedAt]: data.appliedAt || new Date().toISOString().slice(0, 10),
+        [F.candidate.recruiter]: data.recruiter,
+        [F.candidate.stage]: data.stage || 'Entrevista T&C',
+        [F.candidate.finalStatus]: data.finalStatus || 'En proceso',
+      } as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
     return this.candidateFromRecord(r);
   }
 
@@ -357,6 +426,7 @@ export class AirtableRepository implements Repository {
     const r = (await this.base(env.airtable.tables.candidates).update(
       found,
       fields,
+      { typecast: true },
     )) as unknown as Airtable.Record<FieldSet>;
     return this.candidateFromRecord(r);
   }
@@ -402,6 +472,60 @@ export class AirtableRepository implements Repository {
       : {};
     const records = await this.selectAll(env.airtable.tables.stages, opts);
     return records.map((r) => this.movementFromRecord(r));
+  }
+
+  private async findMovementRecordId(id: string): Promise<string | null> {
+    const records = await this.selectAll(env.airtable.tables.stages, {
+      filterByFormula: `{${F.stage.id}} = "${id}"`,
+      maxRecords: 1,
+    });
+    return records[0]?.id ?? null;
+  }
+
+  async createStageMovement(data: any) {
+    const newId =
+      data.id || `MV${Math.floor(1000 + Math.random() * 9000)}`;
+    const fields: Record<string, any> = {
+      [F.stage.id]: newId,
+    };
+    if (data.candidateId !== undefined) fields[F.stage.candidateId] = data.candidateId;
+    if (data.vacancyId !== undefined) fields[F.stage.vacancyId] = data.vacancyId;
+    if (data.stage !== undefined) fields[F.stage.stage] = data.stage;
+    if (data.startedAt) fields[F.stage.startedAt] = data.startedAt;
+    if (data.endedAt) fields[F.stage.endedAt] = data.endedAt;
+    if (data.result !== undefined) fields[F.stage.result] = data.result;
+    if (data.comments !== undefined) fields[F.stage.comments] = data.comments;
+
+    const r = (await this.base(env.airtable.tables.stages).create(
+      fields as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.movementFromRecord(r);
+  }
+
+  async updateStageMovement(id: string, patch: Partial<StageMovement>) {
+    const found = await this.findMovementRecordId(id);
+    if (!found) throw new Error('Movimiento no encontrado');
+    const fields: Record<string, any> = {};
+    if (patch.candidateId !== undefined) fields[F.stage.candidateId] = patch.candidateId;
+    if (patch.vacancyId !== undefined) fields[F.stage.vacancyId] = patch.vacancyId;
+    if (patch.stage !== undefined) fields[F.stage.stage] = patch.stage;
+    if (patch.startedAt !== undefined) fields[F.stage.startedAt] = patch.startedAt;
+    if (patch.endedAt !== undefined) fields[F.stage.endedAt] = patch.endedAt;
+    if (patch.result !== undefined) fields[F.stage.result] = patch.result;
+    if (patch.comments !== undefined) fields[F.stage.comments] = patch.comments;
+
+    const r = (await this.base(env.airtable.tables.stages).update(
+      found,
+      fields,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.movementFromRecord(r);
+  }
+
+  async deleteStageMovement(id: string) {
+    const found = await this.findMovementRecordId(id);
+    if (found) await this.base(env.airtable.tables.stages).destroy(found);
   }
 
   // ============================================================
@@ -472,9 +596,99 @@ export class AirtableRepository implements Repository {
         reviewId: str(f, F.reviewTime.reviewId) || r.id,
         candidateId: str(f, F.reviewTime.candidateId),
         cvSentAt: str(f, F.reviewTime.cvSentAt),
-        status: str(f, F.reviewTime.status),
+        returnedAt: str(f, F.reviewTime.returnedAt),
+        headName: str(f, F.reviewTime.headName),
       };
     });
+  }
+
+  // ============================================================
+  // Catalogos maestros (Seniorities, Hiring Managers, Reclutadores)
+  // ============================================================
+  async listCatalog(type: CatalogType): Promise<CatalogItem[]> {
+    const cfg = CATALOG_TABLES[type];
+    const records = await this.selectAll(cfg.tableId);
+    return records
+      .map((r) => ({
+        id: String(r.fields[cfg.idField] || r.id),
+        recordId: r.id,
+        name: String(r.fields[cfg.nameField] || '').trim(),
+      }))
+      .filter((c) => c.name);
+  }
+
+  private async nextCatalogId(type: CatalogType): Promise<string> {
+    const cfg = CATALOG_TABLES[type];
+    const records = await this.selectAll(cfg.tableId);
+    let maxN = 0;
+    const re = new RegExp(`^${cfg.idPrefix}(\\d{1,})$`);
+    for (const r of records) {
+      const idStr = String(r.fields[cfg.idField] || '');
+      const m = idStr.match(re);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    return `${cfg.idPrefix}${String(maxN + 1).padStart(4, '0')}`;
+  }
+
+  async createCatalogItem(
+    type: CatalogType,
+    name: string,
+  ): Promise<CatalogItem> {
+    const cfg = CATALOG_TABLES[type];
+    const newId = await this.nextCatalogId(type);
+    const r = (await this.base(cfg.tableId).create(
+      {
+        [cfg.idField]: newId,
+        [cfg.nameField]: name,
+      } as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return {
+      id: String(r.fields[cfg.idField] || r.id),
+      recordId: r.id,
+      name: String(r.fields[cfg.nameField] || '').trim(),
+    };
+  }
+
+  private async findCatalogRecordId(
+    type: CatalogType,
+    id: string,
+  ): Promise<string | null> {
+    const cfg = CATALOG_TABLES[type];
+    const records = await this.selectAll(cfg.tableId, {
+      filterByFormula: `{${cfg.idField}} = "${id}"`,
+      maxRecords: 1,
+    });
+    return records[0]?.id ?? null;
+  }
+
+  async updateCatalogItem(
+    type: CatalogType,
+    id: string,
+    name: string,
+  ): Promise<CatalogItem> {
+    const cfg = CATALOG_TABLES[type];
+    const found = await this.findCatalogRecordId(type, id);
+    if (!found) throw new Error('Elemento no encontrado');
+    const r = (await this.base(cfg.tableId).update(
+      found,
+      { [cfg.nameField]: name } as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return {
+      id: String(r.fields[cfg.idField] || r.id),
+      recordId: r.id,
+      name: String(r.fields[cfg.nameField] || '').trim(),
+    };
+  }
+
+  async deleteCatalogItem(type: CatalogType, id: string): Promise<void> {
+    const cfg = CATALOG_TABLES[type];
+    const found = await this.findCatalogRecordId(type, id);
+    if (found) await this.base(cfg.tableId).destroy(found);
   }
 
   // ============================================================

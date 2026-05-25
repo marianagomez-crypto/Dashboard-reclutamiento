@@ -6,7 +6,6 @@ import {
   DROP_REASONS,
   FINAL_STATUSES,
   FUENTES,
-  RECRUITERS,
   STAGES,
 } from '@/lib/types';
 
@@ -16,7 +15,7 @@ const patchSchema = z.object({
   name: z.string().min(2).optional(),
   vacancyId: z.string().optional(),
   source: z.enum(FUENTES as unknown as [string, ...string[]]).optional(),
-  recruiter: z.enum(RECRUITERS as unknown as [string, ...string[]]).optional(),
+  recruiter: z.string().optional(),
   stage: z.enum(STAGES as unknown as [string, ...string[]]).optional(),
   finalStatus: z
     .enum(FINAL_STATUSES as unknown as [string, ...string[]])
@@ -49,17 +48,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       { status: 400 },
     );
   }
-  const repo = await getRepo();
-  const c = await repo.updateCandidate(params.id, parsed.data as any);
-  await repo.logActivity({
-    userId: session.sub,
-    userName: session.name,
-    action: 'actualizo un candidato',
-    entity: 'candidato',
-    entityId: c.id,
-    detail: parsed.data.stage ? `etapa -> ${parsed.data.stage}` : undefined,
-  });
-  return NextResponse.json({ data: c });
+  try {
+    const repo = await getRepo();
+    const c = await repo.updateCandidate(params.id, parsed.data as any);
+    await repo.logActivity({
+      userId: session.sub,
+      userName: session.name,
+      action: 'actualizo un candidato',
+      entity: 'candidato',
+      entityId: c.id,
+      detail: parsed.data.stage ? `etapa -> ${parsed.data.stage}` : undefined,
+    });
+    return NextResponse.json({ data: c });
+  } catch (err: any) {
+    console.error('[api/candidates PATCH]', err);
+    return NextResponse.json(
+      { error: err?.message || 'No se pudo actualizar' },
+      { status: 500 },
+    );
+  }
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {

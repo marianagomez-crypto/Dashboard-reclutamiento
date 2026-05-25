@@ -2,6 +2,8 @@ import bcrypt from 'bcryptjs';
 import type {
   ActivityLog,
   Candidate,
+  CatalogItem,
+  CatalogType,
   Ingreso,
   Notification,
   ReviewTime,
@@ -132,14 +134,24 @@ export class MockRepository implements Repository {
   async createCandidate(
     data: Omit<Candidate, 'id' | 'recordId' | 'appliedAt'> & { appliedAt?: string },
   ) {
-    const id = `CAND-${Math.floor(2000 + Math.random() * 8000)}`;
+    // ID autoincremental con formato CNNNN basado en los existentes
+    const store = getStore();
+    let maxN = 0;
+    for (const c of store.candidates) {
+      const m = c.id.match(/^C(\d{1,})$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    const id = `C${String(maxN + 1).padStart(4, '0')}`;
     const c: Candidate = {
       ...data,
       id,
       recordId: `rec_${uid('cand')}`,
       appliedAt: data.appliedAt || new Date().toISOString(),
     };
-    getStore().candidates.unshift(c);
+    store.candidates.unshift(c);
     return c;
   }
 
@@ -185,14 +197,24 @@ export class MockRepository implements Repository {
   async createVacancy(
     data: Omit<Vacancy, 'id' | 'recordId' | 'openedAt'> & { openedAt?: string },
   ) {
-    const id = `VAC-${Math.floor(1000 + Math.random() * 9000)}`;
+    // ID autoincremental con formato VCNNNN basado en los existentes
+    const store = getStore();
+    let maxN = 0;
+    for (const v of store.vacancies) {
+      const m = v.id.match(/^VC(\d{1,})$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    const id = `VC${String(maxN + 1).padStart(4, '0')}`;
     const v: Vacancy = {
       ...data,
       id,
       recordId: `rec_${uid('vac')}`,
       openedAt: data.openedAt || new Date().toISOString(),
     };
-    getStore().vacancies.unshift(v);
+    store.vacancies.unshift(v);
     return v;
   }
 
@@ -214,6 +236,42 @@ export class MockRepository implements Repository {
     return candidateId ? list.filter((m) => m.candidateId === candidateId) : list;
   }
 
+  async createStageMovement(
+    data: Omit<StageMovement, 'id' | 'recordId'> & { id?: string },
+  ): Promise<StageMovement> {
+    const store = getStore();
+    const id =
+      data.id || `MV${String(store.movements.length + 1).padStart(4, '0')}`;
+    const m: StageMovement = {
+      id,
+      recordId: `rec_${uid('mov')}`,
+      candidateId: data.candidateId,
+      vacancyId: data.vacancyId,
+      stage: data.stage,
+      startedAt: data.startedAt,
+      endedAt: data.endedAt,
+      result: data.result,
+      comments: data.comments,
+    };
+    store.movements.unshift(m);
+    return m;
+  }
+
+  async updateStageMovement(
+    id: string,
+    patch: Partial<StageMovement>,
+  ): Promise<StageMovement> {
+    const m = getStore().movements.find((x) => x.id === id);
+    if (!m) throw new Error('Movimiento no encontrado');
+    Object.assign(m, patch);
+    return m;
+  }
+
+  async deleteStageMovement(id: string): Promise<void> {
+    const store = getStore();
+    store.movements = store.movements.filter((m) => m.id !== id);
+  }
+
   // ---- Sources ----
   async listSources(): Promise<Source[]> {
     return getStore().sources;
@@ -232,6 +290,66 @@ export class MockRepository implements Repository {
   // ---- Review times (stub en mock) ----
   async listReviewTimes(): Promise<ReviewTime[]> {
     return [];
+  }
+
+  // ---- Catalogos maestros ----
+  private catalogArray(type: CatalogType): CatalogItem[] {
+    const store = getStore();
+    if (type === 'seniorities') return store.seniorities;
+    if (type === 'hiring-managers') return store.hiringManagers;
+    return store.recruiters;
+  }
+
+  private catalogPrefix(type: CatalogType): string {
+    if (type === 'seniorities') return 'S';
+    if (type === 'hiring-managers') return 'HM';
+    return 'R';
+  }
+
+  async listCatalog(type: CatalogType): Promise<CatalogItem[]> {
+    return [...this.catalogArray(type)];
+  }
+
+  async createCatalogItem(type: CatalogType, name: string): Promise<CatalogItem> {
+    const arr = this.catalogArray(type);
+    const prefix = this.catalogPrefix(type);
+    const re = new RegExp(`^${prefix}(\\d{1,})$`);
+    let maxN = 0;
+    for (const c of arr) {
+      const m = c.id.match(re);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    const item: CatalogItem = {
+      id: `${prefix}${String(maxN + 1).padStart(4, '0')}`,
+      recordId: `rec_${uid('cat')}`,
+      name,
+    };
+    arr.push(item);
+    return item;
+  }
+
+  async updateCatalogItem(
+    type: CatalogType,
+    id: string,
+    name: string,
+  ): Promise<CatalogItem> {
+    const arr = this.catalogArray(type);
+    const item = arr.find((x) => x.id === id);
+    if (!item) throw new Error('Elemento no encontrado');
+    item.name = name;
+    return item;
+  }
+
+  async deleteCatalogItem(type: CatalogType, id: string): Promise<void> {
+    const store = getStore();
+    if (type === 'seniorities')
+      store.seniorities = store.seniorities.filter((c) => c.id !== id);
+    else if (type === 'hiring-managers')
+      store.hiringManagers = store.hiringManagers.filter((c) => c.id !== id);
+    else store.recruiters = store.recruiters.filter((c) => c.id !== id);
   }
 
   // ---- Activity ----

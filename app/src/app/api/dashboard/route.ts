@@ -34,11 +34,9 @@ export async function GET() {
     return t >= weekAgo - 7 * 86_400_000 && t < weekAgo;
   }).length;
 
-  const rejected = candidates.filter(
-    (c) => c.finalStatus === 'Se cayó' || c.finalStatus === 'No seleccionado',
-  ).length;
-  const resolved = hired.length + rejected;
-  const conversionRate = resolved > 0 ? (hired.length / resolved) * 100 : 0;
+  // Conversión / mes = contrataciones del mes / total de candidatos
+  const conversionRate =
+    candidates.length > 0 ? (hiresThisMonth / candidates.length) * 100 : 0;
 
   // Time to hire (días entre postulación y hoy para los hired)
   const avgTimeToHireDays =
@@ -54,7 +52,7 @@ export async function GET() {
   const stageCounts: Record<Stage, number> = {
     Screening: 0,
     'Entrevista T&C': 0,
-    'Entrevista Líder': 0,
+    'Entrevista líder': 0,
     'Prueba Tecnica': 0,
     Oferta: 0,
     Ingreso: 0,

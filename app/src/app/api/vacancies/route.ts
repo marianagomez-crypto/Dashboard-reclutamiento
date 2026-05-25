@@ -4,10 +4,8 @@ import { getRepo } from '@/lib/data/repository';
 import { getSession } from '@/lib/auth/session';
 import {
   AREAS,
-  HIRING_MANAGERS,
   MODALIDADES,
   PRIORITIES,
-  RECRUITERS,
   VACANCY_STATUSES,
 } from '@/lib/types';
 
@@ -17,12 +15,10 @@ const createSchema = z.object({
   title: z.string().min(2),
   area: z.enum(AREAS as unknown as [string, ...string[]]),
   seniority: z.string().optional(),
-  recruiter: z
-    .enum(RECRUITERS as unknown as [string, ...string[]])
-    .optional(),
-  hiringManager: z
-    .enum(HIRING_MANAGERS as unknown as [string, ...string[]])
-    .optional(),
+  // Recruiter y Hiring Manager se validan desde catalogos en Airtable
+  // (tablas Reclutadores / Hiring Managers), no contra enum hardcoded.
+  recruiter: z.string().optional(),
+  hiringManager: z.string().optional(),
   positions: z.number().int().min(1).default(1),
   status: z
     .enum(VACANCY_STATUSES as unknown as [string, ...string[]])
@@ -59,15 +55,23 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const repo = await getRepo();
-  const v = await repo.createVacancy(parsed.data as any);
-  await repo.logActivity({
-    userId: session.sub,
-    userName: session.name,
-    action: 'creo una vacante',
-    entity: 'vacante',
-    entityId: v.id,
-    detail: v.title,
-  });
-  return NextResponse.json({ data: v }, { status: 201 });
+  try {
+    const repo = await getRepo();
+    const v = await repo.createVacancy(parsed.data as any);
+    await repo.logActivity({
+      userId: session.sub,
+      userName: session.name,
+      action: 'creo una vacante',
+      entity: 'vacante',
+      entityId: v.id,
+      detail: v.title,
+    });
+    return NextResponse.json({ data: v }, { status: 201 });
+  } catch (err: any) {
+    console.error('[api/vacancies POST]', err);
+    return NextResponse.json(
+      { error: err?.message || 'No se pudo crear la vacante' },
+      { status: 500 },
+    );
+  }
 }

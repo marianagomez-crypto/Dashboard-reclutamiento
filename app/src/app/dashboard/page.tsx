@@ -10,11 +10,17 @@ import { getRepo } from '@/lib/data/repository';
 import { getSession } from '@/lib/auth/session';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import {
+  CandidatesPerVacancyChart,
   DropReasonsChart,
+  HeadReviewTimeChart,
   NotSelectedByStageChart,
   SourceChart,
   StageBarChart,
   TrendChart,
+  VacancyAgingChart,
+  type CandidatesPerVacancyRow,
+  type HeadReviewRow,
+  type VacancyAgingRow,
 } from '@/components/dashboard/charts';
 import { STAGE_COLORS, STAGES, type Stage } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
@@ -24,9 +30,10 @@ export const dynamic = 'force-dynamic';
 
 async function fetchData() {
   const repo = await getRepo();
-  const [candidates, vacancies] = await Promise.all([
+  const [candidates, vacancies, reviewTimes] = await Promise.all([
     repo.listCandidates(),
     repo.listVacancies(),
+    repo.listReviewTimes(),
   ]);
 
   const now = Date.now();
@@ -53,22 +60,10 @@ async function fetchData() {
     return t >= twoMonthsAgo && t < monthAgo;
   }).length;
 
-  // Conversión MENSUAL — calculada solo con candidatos del último mes
-  // Fórmula: Contratado / (Contratado + Se cayó)
-  // (excluye "No seleccionado" porque es decisión interna de descarte)
-  const inLastMonth = (c: (typeof candidates)[number]) =>
-    c.appliedAt && new Date(c.appliedAt).getTime() >= monthAgo;
-  const hiredThisMonthSet = candidates.filter(
-    (c) => c.finalStatus === 'Contratado' && inLastMonth(c),
-  );
-  const droppedThisMonth = candidates.filter(
-    (c) => c.finalStatus === 'Se cayó' && inLastMonth(c),
-  );
-  const resolvedThisMonth = hiredThisMonthSet.length + droppedThisMonth.length;
+  // Conversión / mes = contrataciones del mes / total de candidatos
+  // (% del pool total que termina firmando en el ultimo mes)
   const conversionRate =
-    resolvedThisMonth > 0
-      ? (hiredThisMonthSet.length / resolvedThisMonth) * 100
-      : 0;
+    candidates.length > 0 ? (hiresThisMonth / candidates.length) * 100 : 0;
 
   const hiredWithDate = hired.filter((c) => !!c.appliedAt);
   const avgTimeToHireDays =
@@ -155,6 +150,58 @@ async function fetchData() {
   })).filter((d) => d.value > 0);
   const notSelectedTotal = notSelectedByStage.reduce((acc, d) => acc + d.value, 0);
 
+  // ---- Tiempo promedio de revision por Head ----
+  // diasRevision = FechaRetornoCV - FechaEnvioCV, agrupado por Nombre del Head
+  const headAcc: Record<string, { total: number; count: number }> = {};
+  reviewTimes.forEach((rt) => {
+    if (!rt.headName || !rt.cvSentAt || !rt.returnedAt) return;
+    const sent = new Date(rt.cvSentAt).getTime();
+    const back = new Date(rt.returnedAt).getTime();
+    if (!Number.isFinite(sent) || !Number.isFinite(back)) return;
+    const days = (back - sent) / 86_400_000;
+    if (days < 0) return; // ignorar registros con fechas invertidas
+    const key = rt.headName;
+    if (!headAcc[key]) headAcc[key] = { total: 0, count: 0 };
+    headAcc[key].total += days;
+    headAcc[key].count += 1;
+  });
+  const headReview: HeadReviewRow[] = Object.entries(headAcc).map(([head, v]) => ({
+    head,
+    avgDays: Math.round((v.total / v.count) * 10) / 10,
+    count: v.count,
+  }));
+
+  // ---- Candidatos "En proceso" por vacante (mostrando Puesto, no ID) ----
+  const vacanciesById = new Map(vacancies.map((v) => [v.id, v]));
+  const inProcessByVacancy: Record<string, number> = {};
+  candidates
+    .filter((c) => c.finalStatus === 'En proceso' && c.vacancyId)
+    .forEach((c) => {
+      const key = c.vacancyId as string;
+      inProcessByVacancy[key] = (inProcessByVacancy[key] || 0) + 1;
+    });
+  const candidatesPerVacancy: CandidatesPerVacancyRow[] = Object.entries(
+    inProcessByVacancy,
+  )
+    .map(([vacancyId, count]) => {
+      const v = vacanciesById.get(vacancyId);
+      return {
+        vacancyId,
+        title: v?.title || vacancyId,
+        count,
+      };
+    })
+    .filter((r) => r.count > 0);
+
+  // ---- Antiguedad de vacantes abiertas (dias desde la apertura) ----
+  const vacancyAging: VacancyAgingRow[] = vacancies
+    .filter((v) => v.status === 'Abierta' && !!v.openedAt)
+    .map((v) => {
+      const opened = new Date(v.openedAt).getTime();
+      const days = Math.max(0, Math.floor((Date.now() - opened) / 86_400_000));
+      return { id: v.id, title: v.title, daysOpen: days, priority: v.priority };
+    });
+
   // ---- Motivos de caída (decisión del candidato) ----
   const dropped = candidates.filter((c) => c.finalStatus === 'Se cayó');
   const dropReasons = [
@@ -191,6 +238,9 @@ async function fetchData() {
     notSelectedTotal,
     dropReasons,
     dropReasonsTotal,
+    vacancyAging,
+    candidatesPerVacancy,
+    headReview,
     source: repo.source(),
   };
 }
@@ -310,6 +360,18 @@ export default async function DashboardPage() {
           title="Distribución por etapa · Candidatos en proceso"
           description={`${data.stageBar.reduce((acc, d) => acc + d.value, 0)} candidatos activos en el pipeline`}
         />
+      </section>
+
+      <section>
+        <VacancyAgingChart data={data.vacancyAging} />
+      </section>
+
+      <section>
+        <CandidatesPerVacancyChart data={data.candidatesPerVacancy} />
+      </section>
+
+      <section>
+        <HeadReviewTimeChart data={data.headReview} />
       </section>
 
     </div>

@@ -15,6 +15,8 @@ import {
   Settings,
   Menu,
   X,
+  KanbanSquare,
+  BookMarked,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/brand/logo';
@@ -30,10 +32,12 @@ interface NavItem {
 const navItems: NavItem[] = [
   { href: '/dashboard', label: 'Resumen', icon: LayoutDashboard },
   { href: '/dashboard/candidatos', label: 'Candidatos', icon: Users },
+  { href: '/dashboard/pipeline', label: 'Pipeline', icon: KanbanSquare },
   { href: '/dashboard/vacantes', label: 'Vacantes', icon: Briefcase },
   { href: '/dashboard/entrevistas', label: 'Bitácora', icon: Calendar },
   { href: '/dashboard/reportes', label: 'Reportes', icon: BarChart3 },
   { href: '/dashboard/actividad', label: 'Actividad', icon: History },
+  { href: '/dashboard/catalogos', label: 'Catálogos', icon: BookMarked },
   { href: '/dashboard/admin', label: 'Admin', icon: ShieldCheck, roles: ['admin'] },
   { href: '/dashboard/ajustes', label: 'Ajustes', icon: Settings },
 ];

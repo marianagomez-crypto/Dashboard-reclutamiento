@@ -8,7 +8,7 @@ export type Role = 'admin' | 'recruiter' | 'viewer';
 export type Stage =
   | 'Screening'
   | 'Entrevista T&C'
-  | 'Entrevista Líder'
+  | 'Entrevista líder'
   | 'Prueba Tecnica'
   | 'Oferta'
   | 'Ingreso';
@@ -16,7 +16,7 @@ export type Stage =
 export const STAGES: Stage[] = [
   'Screening',
   'Entrevista T&C',
-  'Entrevista Líder',
+  'Entrevista líder',
   'Prueba Tecnica',
   'Oferta',
   'Ingreso',
@@ -25,7 +25,7 @@ export const STAGES: Stage[] = [
 export const STAGE_COLORS: Record<Stage, string> = {
   Screening: '#98A9DF',
   'Entrevista T&C': '#6873D7',
-  'Entrevista Líder': '#4453A0',
+  'Entrevista líder': '#4453A0',
   'Prueba Tecnica': '#36B7B3',
   Oferta: '#FDCA56',
   Ingreso: '#00A29B',
@@ -203,8 +203,19 @@ export interface ReviewTime {
   reviewId: string;         // ID Revision
   candidateId?: string;     // ID Candidato
   cvSentAt?: string;        // Fecha de envio de cv
-  status?: string;          // Status
+  returnedAt?: string;      // Fecha de Retorno de CV
+  headName?: string;        // Nombre del Head
 }
+
+// Catalogos maestros (Seniorities, Hiring Managers, Reclutadores).
+// Comparten estructura: ID propio + nombre + recordId interno de Airtable.
+export interface CatalogItem {
+  id: string;       // ID propio (S0001, HM0001, R0001)
+  recordId: string; // rec... interno de Airtable
+  name: string;     // Nombre legible
+}
+
+export type CatalogType = 'seniorities' | 'hiring-managers' | 'recruiters';
 
 export interface Ingreso {
   id: string;

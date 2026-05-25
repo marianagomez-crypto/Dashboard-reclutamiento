@@ -6,9 +6,16 @@ export const dynamic = 'force-dynamic';
 
 export default async function Page() {
   const repo = await getRepo();
-  const [candidates, vacancies] = await Promise.all([
+  const [candidates, vacancies, recruiters] = await Promise.all([
     repo.listCandidates(),
     repo.listVacancies(),
+    repo.listCatalog('recruiters'),
   ]);
-  return <CandidatesPage initialCandidates={candidates} vacancies={vacancies} />;
+  return (
+    <CandidatesPage
+      initialCandidates={candidates}
+      vacancies={vacancies}
+      recruiters={recruiters}
+    />
+  );
 }

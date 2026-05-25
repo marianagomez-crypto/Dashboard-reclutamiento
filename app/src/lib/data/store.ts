@@ -6,6 +6,7 @@ import { env } from '@/lib/env';
 import type {
   ActivityLog,
   Candidate,
+  CatalogItem,
   Ingreso,
   Notification,
   Source,
@@ -32,6 +33,9 @@ interface Store {
   ingresos: Ingreso[];
   activity: ActivityLog[];
   notifications: Notification[];
+  seniorities: CatalogItem[];
+  hiringManagers: CatalogItem[];
+  recruiters: CatalogItem[];
 }
 
 declare global {
@@ -83,6 +87,28 @@ function buildInitial(): Store {
     },
   ];
 
+  // Seed inicial de catalogos maestros (mismos que estan en Airtable)
+  const seniorities: CatalogItem[] = [
+    { id: 'S0001', recordId: 'rec_seed_s1', name: 'Junior' },
+    { id: 'S0002', recordId: 'rec_seed_s2', name: 'Intermedio' },
+    { id: 'S0003', recordId: 'rec_seed_s3', name: 'Senior' },
+    { id: 'S0004', recordId: 'rec_seed_s4', name: 'Practicas' },
+  ];
+  const hiringManagers: CatalogItem[] = [
+    { id: 'HM0001', recordId: 'rec_seed_hm1', name: 'Antonella Arellano' },
+    { id: 'HM0002', recordId: 'rec_seed_hm2', name: 'Jorge Morales' },
+    { id: 'HM0003', recordId: 'rec_seed_hm3', name: 'Marco Del Rio' },
+    { id: 'HM0004', recordId: 'rec_seed_hm4', name: 'Ruben Montenegro' },
+    { id: 'HM0005', recordId: 'rec_seed_hm5', name: 'Meylin Miyashiro' },
+    { id: 'HM0006', recordId: 'rec_seed_hm6', name: 'Yadira Yovera' },
+    { id: 'HM0007', recordId: 'rec_seed_hm7', name: 'Monica Obando' },
+    { id: 'HM0008', recordId: 'rec_seed_hm8', name: 'Vania Hagel' },
+  ];
+  const recruiters: CatalogItem[] = [
+    { id: 'R0001', recordId: 'rec_seed_r1', name: 'Antonella Arellano' },
+    { id: 'R0002', recordId: 'rec_seed_r2', name: 'Mayra Pereira' },
+  ];
+
   return {
     users,
     candidates,
@@ -92,6 +118,9 @@ function buildInitial(): Store {
     ingresos,
     activity,
     notifications,
+    seniorities,
+    hiringManagers,
+    recruiters,
   };
 }
 

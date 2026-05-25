@@ -5,6 +5,8 @@ import { env } from '@/lib/env';
 import type {
   ActivityLog,
   Candidate,
+  CatalogItem,
+  CatalogType,
   Ingreso,
   Notification,
   ReviewTime,
@@ -61,8 +63,16 @@ export interface Repository {
   updateVacancy(id: string, patch: Partial<Vacancy>): Promise<Vacancy>;
   deleteVacancy(id: string): Promise<void>;
 
-  // Stage movements (historial)
+  // Stage movements (historial) — editable
   listStageMovements(candidateId?: string): Promise<StageMovement[]>;
+  createStageMovement(
+    data: Omit<StageMovement, 'id' | 'recordId'> & { id?: string },
+  ): Promise<StageMovement>;
+  updateStageMovement(
+    id: string,
+    patch: Partial<StageMovement>,
+  ): Promise<StageMovement>;
+  deleteStageMovement(id: string): Promise<void>;
 
   // Sources catalogo
   listSources(): Promise<Source[]>;
@@ -75,6 +85,16 @@ export interface Repository {
 
   // Tiempo de revisión por hiring manager / candidato
   listReviewTimes(): Promise<ReviewTime[]>;
+
+  // Catalogos maestros (Seniorities, Hiring Managers, Reclutadores)
+  listCatalog(type: CatalogType): Promise<CatalogItem[]>;
+  createCatalogItem(type: CatalogType, name: string): Promise<CatalogItem>;
+  updateCatalogItem(
+    type: CatalogType,
+    id: string,
+    name: string,
+  ): Promise<CatalogItem>;
+  deleteCatalogItem(type: CatalogType, id: string): Promise<void>;
 
   // Activity (local, no Airtable)
   listActivity(limit?: number): Promise<ActivityLog[]>;

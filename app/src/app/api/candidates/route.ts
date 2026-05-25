@@ -6,7 +6,6 @@ import {
   DROP_REASONS,
   FINAL_STATUSES,
   FUENTES,
-  RECRUITERS,
   STAGES,
 } from '@/lib/types';
 
@@ -16,7 +15,7 @@ const createSchema = z.object({
   name: z.string().min(2),
   vacancyId: z.string().optional(),
   source: z.enum(FUENTES as unknown as [string, ...string[]]),
-  recruiter: z.enum(RECRUITERS as unknown as [string, ...string[]]).optional(),
+  recruiter: z.string().optional(),
   stage: z.enum(STAGES as unknown as [string, ...string[]]).default('Screening'),
   finalStatus: z
     .enum(FINAL_STATUSES as unknown as [string, ...string[]])
@@ -54,21 +53,27 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const repo = await getRepo();
-  const c = await repo.createCandidate(parsed.data as any);
-  await repo.logActivity({
-    userId: session.sub,
-    userName: session.name,
-    action: 'creo un candidato',
-    entity: 'candidato',
-    entityId: c.id,
-    detail: c.name,
-  });
-  await repo.pushNotification({
-    title: 'Nuevo candidato',
-    body: `${c.name} fue agregado al pipeline.`,
-    type: 'success',
-    href: '/dashboard/candidatos',
-  });
-  return NextResponse.json({ data: c }, { status: 201 });
+  try {
+    const repo = await getRepo();
+    const c = await repo.createCandidate(parsed.data as any);
+    await repo.logActivity({
+      userId: session.sub,
+      userName: session.name,
+      action: 'creo un candidato',
+      entity: 'candidato',
+      entityId: c.id,
+      detail: c.name,
+    });
+    await repo.pushNotification({
+      title: 'Nuevo candidato',
+      body: `${c.name} fue agregado al pipeline.`,
+      type: 'success',
+      href: '/dashboard/candidatos',
+    });
+    return NextResponse.json({ data: c }, { status: 201 });
+  } catch (err: any) {
+    const msg = err?.message || 'No se pudo crear el candidato';
+    console.error('[api/candidates POST]', err);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

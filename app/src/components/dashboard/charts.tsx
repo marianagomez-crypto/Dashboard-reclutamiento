@@ -29,6 +29,13 @@ import { Filter, UserX, TrendingDown, Lightbulb } from 'lucide-react';
 
 const PIE_COLORS = ['#31359C', '#00A29B', '#FDCA56', '#6873D7', '#36B7B3', '#D1A646', '#98A9DF'];
 
+// Colores de prioridad (rojo / azul / verde brand)
+const PRIORITY_COLORS: Record<string, { from: string; to: string; solid: string }> = {
+  Alta:  { from: '#F08585', to: '#D14646', solid: '#D14646' },
+  Media: { from: '#6873D7', to: '#31359C', solid: '#31359C' },
+  Baja:  { from: '#4FC3B8', to: '#00A29B', solid: '#00A29B' },
+};
+
 interface DailyPoint {
   label: string;
   aplicaciones: number;
@@ -205,30 +212,10 @@ export function FunnelChart({ data }: { data: { stage: Stage; value: number }[] 
   );
 }
 
-function pieLabel(props: any) {
-  const { cx, cy, midAngle, outerRadius, percent, value, name } = props;
-  if (!value) return null;
-  const RAD = Math.PI / 180;
-  const radius = outerRadius + 18;
-  const x = cx + radius * Math.cos(-midAngle * RAD);
-  const y = cy + radius * Math.sin(-midAngle * RAD);
-  return (
-    <text
-      x={x}
-      y={y}
-      fill="hsl(var(--foreground))"
-      textAnchor={x > cx ? 'start' : 'end'}
-      dominantBaseline="central"
-      fontSize={11}
-      fontWeight={600}
-    >
-      {`${name}: ${value} (${Math.round(percent * 100)}%)`}
-    </text>
-  );
-}
-
 export function SourceChart({ data }: { data: { name: string; value: number }[] }) {
   const total = data.reduce((acc, d) => acc + d.value, 0);
+  const sorted = [...data].sort((a, b) => b.value - a.value);
+
   return (
     <Card>
       <CardHeader>
@@ -236,35 +223,81 @@ export function SourceChart({ data }: { data: { name: string; value: number }[] 
         <CardDescription>Top canales de adquisición · {total} total</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="h-72 w-full rounded-xl bg-muted/40 p-3">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                dataKey="value"
-                nameKey="name"
-                innerRadius={45}
-                outerRadius={72}
-                paddingAngle={3}
-                strokeWidth={0}
-                label={pieLabel}
-                labelLine={false}
-              >
-                {data.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 12,
-                  border: '1px solid hsl(var(--border))',
-                  background: 'hsl(var(--popover))',
-                  fontSize: 12,
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" />
-            </PieChart>
-          </ResponsiveContainer>
+        <div className="rounded-xl bg-muted/40 p-4">
+          {/* Donut con total al centro */}
+          <div className="relative mx-auto h-48 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius="62%"
+                  outerRadius="92%"
+                  paddingAngle={3}
+                  strokeWidth={0}
+                  startAngle={90}
+                  endAngle={-270}
+                >
+                  {data.map((_, i) => (
+                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: '1px solid hsl(var(--border))',
+                    background: 'hsl(var(--popover))',
+                    fontSize: 12,
+                  }}
+                  formatter={(v: any, name: any) => [
+                    `${v} (${total > 0 ? Math.round((Number(v) / total) * 100) : 0}%)`,
+                    name,
+                  ]}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <span className="font-display text-3xl font-bold leading-none text-foreground tabular-nums">
+                {total}
+              </span>
+              <span className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Candidatos
+              </span>
+            </div>
+          </div>
+
+          {/* Leyenda detallada */}
+          <div className="mt-4 space-y-2">
+            {sorted.map((d) => {
+              const originalIndex = data.findIndex((x) => x.name === d.name);
+              const color = PIE_COLORS[originalIndex % PIE_COLORS.length];
+              const pct = total > 0 ? (d.value / total) * 100 : 0;
+              return (
+                <div
+                  key={d.name}
+                  className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition hover:bg-background/60"
+                >
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ background: color, boxShadow: `0 0 8px ${color}66` }}
+                  />
+                  <span
+                    className="flex-1 truncate text-sm font-medium text-foreground"
+                    title={d.name}
+                  >
+                    {d.name}
+                  </span>
+                  <span className="tabular-nums text-sm font-bold text-foreground">
+                    {d.value}
+                  </span>
+                  <span className="w-10 text-right tabular-nums text-xs font-semibold text-muted-foreground">
+                    {pct.toFixed(0)}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -596,5 +629,644 @@ export function DropReasonsChart({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// Custom tick para el eje Y del aging chart: wrap a 2 lineas si el texto es largo.
+function VacancyYAxisTick(props: any) {
+  const { x, y, payload } = props;
+  const text: string = String(payload?.value ?? '');
+  const MAX = 28; // chars que entran comodos en ~220px @ 12px
+
+  if (text.length <= MAX) {
+    return (
+      <text
+        x={x}
+        y={y}
+        dy={4}
+        textAnchor="end"
+        fontSize={12}
+        fill="hsl(var(--foreground))"
+        fontWeight={500}
+      >
+        {text}
+      </text>
+    );
+  }
+
+  // Partir por palabras conservando la primera linea <= MAX chars
+  const words = text.split(' ');
+  let line1 = '';
+  let rest: string[] = [];
+  for (let i = 0; i < words.length; i++) {
+    const candidate = line1 ? `${line1} ${words[i]}` : words[i];
+    if (candidate.length <= MAX) {
+      line1 = candidate;
+    } else {
+      rest = words.slice(i);
+      break;
+    }
+  }
+  let line2 = rest.join(' ');
+  if (line2.length > MAX) line2 = line2.slice(0, MAX - 1) + '…';
+
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor="end"
+      fontSize={12}
+      fill="hsl(var(--foreground))"
+      fontWeight={500}
+    >
+      <tspan x={x} dy="-0.35em">
+        {line1 || text.slice(0, MAX)}
+      </tspan>
+      <tspan x={x} dy="1.2em">
+        {line2}
+      </tspan>
+    </text>
+  );
+}
+
+// ============================================================================
+// Antiguedad de vacantes abiertas — dias transcurridos desde la apertura
+// ============================================================================
+export interface VacancyAgingRow {
+  id: string;
+  title: string;
+  daysOpen: number;
+  priority: 'Alta' | 'Media' | 'Baja' | string;
+}
+
+export function VacancyAgingChart({ data }: { data: VacancyAgingRow[] }) {
+  const sorted = [...data].sort((a, b) => b.daysOpen - a.daysOpen);
+  const avg =
+    sorted.length === 0
+      ? 0
+      : Math.round(sorted.reduce((acc, d) => acc + d.daysOpen, 0) / sorted.length);
+  const oldest = sorted[0];
+
+  // Para que las barras no se aplasten cuando hay pocas vacantes,
+  // pongo un dominio minimo razonable en el eje Y.
+  const maxDays = Math.max(...sorted.map((d) => d.daysOpen), 1);
+  const yMax = Math.ceil(maxDays * 1.15);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <CardTitle>Antigüedad de vacantes abiertas</CardTitle>
+            <CardDescription>
+              Días transcurridos desde la apertura · color por prioridad
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <LegendDot color={PRIORITY_COLORS.Alta.solid} label="Alta" />
+            <LegendDot color={PRIORITY_COLORS.Media.solid} label="Media" />
+            <LegendDot color={PRIORITY_COLORS.Baja.solid} label="Baja" />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {sorted.length === 0 ? (
+          <div className="flex h-48 flex-col items-center justify-center rounded-xl bg-muted/40 p-6 text-center">
+            <p className="text-sm font-medium text-muted-foreground">
+              Sin vacantes abiertas
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground/70">
+              Cuando haya vacantes en estado "Abierta" se verán aquí.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Stat cards de contexto */}
+            <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Abiertas
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold text-foreground tabular-nums">
+                  {sorted.length}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Promedio días
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold text-foreground tabular-nums">
+                  {avg}
+                </p>
+              </div>
+              {oldest && (
+                <div className="col-span-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 sm:col-span-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">
+                    Más antigua
+                  </p>
+                  <p
+                    className="mt-0.5 truncate font-display text-sm font-bold text-destructive"
+                    title={oldest.title}
+                  >
+                    {oldest.title}
+                  </p>
+                  <p className="text-[10px] text-destructive/80 tabular-nums">
+                    {oldest.daysOpen} días
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="w-full rounded-xl bg-muted/40 p-3">
+              <div
+                style={{
+                  // 52px por barra acomoda labels en 2 lineas; minimo razonable
+                  height: Math.max(sorted.length * 52 + 40, 220),
+                }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={sorted}
+                    layout="vertical"
+                    margin={{ left: 8, right: 44, top: 8, bottom: 8 }}
+                    barCategoryGap="22%"
+                  >
+                    <defs>
+                      {(['Alta', 'Media', 'Baja'] as const).map((p) => {
+                        const c = PRIORITY_COLORS[p];
+                        return (
+                          <linearGradient
+                            key={`prio-${p}`}
+                            id={`prio-${p}`}
+                            x1="0"
+                            y1="0"
+                            x2="1"
+                            y2="0"
+                          >
+                            <stop offset="0%" stopColor={c.from} stopOpacity={0.7} />
+                            <stop offset="100%" stopColor={c.to} stopOpacity={1} />
+                          </linearGradient>
+                        );
+                      })}
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 4"
+                      stroke="hsl(var(--border))"
+                      horizontal={false}
+                    />
+                    <XAxis
+                      type="number"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                      domain={[0, yMax]}
+                      label={{
+                        value: 'días',
+                        position: 'insideBottomRight',
+                        offset: -4,
+                        style: { fontSize: 11, fill: 'hsl(var(--muted-foreground))' },
+                      }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="title"
+                      stroke="hsl(var(--foreground))"
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      width={240}
+                      tick={<VacancyYAxisTick />}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
+                      contentStyle={{
+                        borderRadius: 12,
+                        border: '1px solid hsl(var(--border))',
+                        background: 'hsl(var(--popover))',
+                        fontSize: 12,
+                        boxShadow: '0 10px 40px -10px rgba(0,0,0,0.2)',
+                      }}
+                      formatter={(value: any) => [`${value} días`, 'Abierta hace']}
+                      labelFormatter={(label: any, payload: any) => {
+                        const row = payload?.[0]?.payload as VacancyAgingRow | undefined;
+                        if (!row) return label;
+                        return `${row.title} · ${row.priority}`;
+                      }}
+                    />
+                    <Bar dataKey="daysOpen" radius={[0, 8, 8, 0]} minPointSize={4}>
+                      {sorted.map((d, i) => {
+                        const palette =
+                          PRIORITY_COLORS[d.priority] || PRIORITY_COLORS.Media;
+                        const grad = `url(#prio-${
+                          (['Alta', 'Media', 'Baja'] as const).includes(d.priority as any)
+                            ? d.priority
+                            : 'Media'
+                        })`;
+                        return (
+                          <Cell key={i} fill={grad} stroke={palette.solid} strokeOpacity={0} />
+                        );
+                      })}
+                      <LabelList
+                        dataKey="daysOpen"
+                        position="right"
+                        fontSize={12}
+                        fontWeight={800}
+                        fill="hsl(var(--foreground))"
+                        offset={8}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============================================================================
+// Candidatos en proceso por vacante — cuantos activos tiene cada puesto
+// ============================================================================
+export interface CandidatesPerVacancyRow {
+  vacancyId: string;
+  title: string;
+  count: number;
+}
+
+export function CandidatesPerVacancyChart({
+  data,
+}: {
+  data: CandidatesPerVacancyRow[];
+}) {
+  const sorted = [...data].sort((a, b) => b.count - a.count);
+  const maxCount = Math.max(...sorted.map((d) => d.count), 1);
+  const xMax = Math.ceil(maxCount * 1.18) || 1;
+  const total = sorted.reduce((acc, d) => acc + d.count, 0);
+  const top = sorted[0];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Candidatos en proceso por vacante</CardTitle>
+        <CardDescription>
+          Cantidad de candidatos activos por puesto · ordenados de mayor a menor
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {sorted.length === 0 ? (
+          <div className="flex h-48 flex-col items-center justify-center rounded-xl bg-muted/40 p-6 text-center">
+            <p className="text-sm font-medium text-muted-foreground">
+              Sin candidatos en proceso
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground/70">
+              Cuando haya candidatos con Estado Final "En proceso" aparecerán aquí.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Vacantes con activos
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold text-foreground tabular-nums">
+                  {sorted.length}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Total candidatos
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold text-foreground tabular-nums">
+                  {total}
+                </p>
+              </div>
+              {top && (
+                <div className="col-span-2 rounded-xl border border-brand-blue-100 bg-brand-blue-100/40 p-3 sm:col-span-1 dark:border-brand-blue-600/30 dark:bg-brand-blue-600/15">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-brand-blue-700 dark:text-brand-blue-100">
+                    Más activa
+                  </p>
+                  <p
+                    className="mt-0.5 truncate font-display text-sm font-bold text-brand-blue-700 dark:text-brand-blue-100"
+                    title={top.title}
+                  >
+                    {top.title}
+                  </p>
+                  <p className="text-[10px] text-brand-blue-700/80 dark:text-brand-blue-100/80 tabular-nums">
+                    {top.count} candidatos
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="w-full rounded-xl bg-muted/40 p-3">
+              <div
+                style={{
+                  height: Math.max(sorted.length * 52 + 40, 220),
+                }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={sorted}
+                    layout="vertical"
+                    margin={{ left: 8, right: 56, top: 8, bottom: 8 }}
+                    barCategoryGap="22%"
+                  >
+                    <defs>
+                      <linearGradient id="cpv-grad" x1="0" y1="0" x2="1" y2="0">
+                        <stop offset="0%" stopColor="#6873D7" stopOpacity={0.7} />
+                        <stop offset="100%" stopColor="#31359C" stopOpacity={1} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 4"
+                      stroke="hsl(var(--border))"
+                      horizontal={false}
+                    />
+                    <XAxis
+                      type="number"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                      domain={[0, xMax]}
+                      label={{
+                        value: 'candidatos',
+                        position: 'insideBottomRight',
+                        offset: -4,
+                        style: { fontSize: 11, fill: 'hsl(var(--muted-foreground))' },
+                      }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="title"
+                      stroke="hsl(var(--foreground))"
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      width={240}
+                      tick={<VacancyYAxisTick />}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
+                      contentStyle={{
+                        borderRadius: 12,
+                        border: '1px solid hsl(var(--border))',
+                        background: 'hsl(var(--popover))',
+                        fontSize: 12,
+                        boxShadow: '0 10px 40px -10px rgba(0,0,0,0.2)',
+                      }}
+                      formatter={(value: any) => [`${value} candidatos`, 'En proceso']}
+                      labelFormatter={(label: any) => label}
+                    />
+                    <Bar
+                      dataKey="count"
+                      fill="url(#cpv-grad)"
+                      radius={[0, 8, 8, 0]}
+                      minPointSize={4}
+                    >
+                      <LabelList
+                        dataKey="count"
+                        position="right"
+                        fontSize={13}
+                        fontWeight={800}
+                        fill="hsl(var(--foreground))"
+                        offset={8}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============================================================================
+// Tiempo promedio de revision por Head — desde tabla "Tiempo de revision (head)"
+// ============================================================================
+export interface HeadReviewRow {
+  head: string;       // Nombre del Head
+  avgDays: number;    // dias promedio
+  count: number;      // n de revisiones
+}
+
+export function HeadReviewTimeChart({ data }: { data: HeadReviewRow[] }) {
+  const sorted = [...data].sort((a, b) => b.avgDays - a.avgDays);
+  const maxDays = Math.max(...sorted.map((d) => d.avgDays), 1);
+  const xMax = Math.ceil(maxDays * 1.2) || 1;
+  const overall =
+    sorted.length === 0
+      ? 0
+      : Math.round(
+          (sorted.reduce((acc, d) => acc + d.avgDays * d.count, 0) /
+            sorted.reduce((acc, d) => acc + d.count, 0)) *
+            10,
+        ) / 10;
+  const slowest = sorted[0];
+  const fastest = sorted[sorted.length - 1];
+
+  // Color por velocidad: <=2 dias verde, <=5 azul, >5 gold/rojo
+  const colorFor = (days: number) => {
+    if (days <= 2) return PRIORITY_COLORS.Baja;   // verde-aqua
+    if (days <= 5) return PRIORITY_COLORS.Media;  // azul brand
+    return PRIORITY_COLORS.Alta;                  // rojo
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <CardTitle>Tiempo de revisión por Head</CardTitle>
+            <CardDescription>
+              Días promedio entre envío de CV y retorno · por hiring manager
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <LegendDot color={PRIORITY_COLORS.Baja.solid} label="≤ 2 d" />
+            <LegendDot color={PRIORITY_COLORS.Media.solid} label="3 – 5 d" />
+            <LegendDot color={PRIORITY_COLORS.Alta.solid} label="> 5 d" />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {sorted.length === 0 ? (
+          <div className="flex h-48 flex-col items-center justify-center rounded-xl bg-muted/40 p-6 text-center">
+            <p className="text-sm font-medium text-muted-foreground">
+              Sin revisiones registradas
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground/70">
+              Cuando se carguen registros con envío y retorno de CV aparecerán aquí.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Heads
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold text-foreground tabular-nums">
+                  {sorted.length}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Promedio global
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold text-foreground tabular-nums">
+                  {overall} d
+                </p>
+              </div>
+              {slowest && slowest.head !== fastest?.head && (
+                <div className="col-span-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 sm:col-span-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">
+                    Más lento
+                  </p>
+                  <p
+                    className="mt-0.5 truncate font-display text-sm font-bold text-destructive"
+                    title={slowest.head}
+                  >
+                    {slowest.head}
+                  </p>
+                  <p className="text-[10px] text-destructive/80 tabular-nums">
+                    {slowest.avgDays} d · {slowest.count} revisiones
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="w-full rounded-xl bg-muted/40 p-3">
+              <div
+                style={{
+                  height: Math.max(sorted.length * 52 + 40, 220),
+                }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={sorted}
+                    layout="vertical"
+                    margin={{ left: 8, right: 56, top: 8, bottom: 8 }}
+                    barCategoryGap="22%"
+                  >
+                    <defs>
+                      {(['Alta', 'Media', 'Baja'] as const).map((p) => {
+                        const c = PRIORITY_COLORS[p];
+                        return (
+                          <linearGradient
+                            key={`rev-${p}`}
+                            id={`rev-${p}`}
+                            x1="0"
+                            y1="0"
+                            x2="1"
+                            y2="0"
+                          >
+                            <stop offset="0%" stopColor={c.from} stopOpacity={0.7} />
+                            <stop offset="100%" stopColor={c.to} stopOpacity={1} />
+                          </linearGradient>
+                        );
+                      })}
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 4"
+                      stroke="hsl(var(--border))"
+                      horizontal={false}
+                    />
+                    <XAxis
+                      type="number"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals
+                      domain={[0, xMax]}
+                      label={{
+                        value: 'días',
+                        position: 'insideBottomRight',
+                        offset: -4,
+                        style: { fontSize: 11, fill: 'hsl(var(--muted-foreground))' },
+                      }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="head"
+                      stroke="hsl(var(--foreground))"
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      width={200}
+                      tick={<VacancyYAxisTick />}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
+                      contentStyle={{
+                        borderRadius: 12,
+                        border: '1px solid hsl(var(--border))',
+                        background: 'hsl(var(--popover))',
+                        fontSize: 12,
+                        boxShadow: '0 10px 40px -10px rgba(0,0,0,0.2)',
+                      }}
+                      formatter={(value: any, _name: any, payload: any) => {
+                        const row = payload?.payload as HeadReviewRow | undefined;
+                        return [
+                          `${value} días · ${row?.count ?? 0} revisiones`,
+                          'Promedio',
+                        ];
+                      }}
+                      labelFormatter={(label: any) => label}
+                    />
+                    <Bar dataKey="avgDays" radius={[0, 8, 8, 0]} minPointSize={4}>
+                      {sorted.map((d, i) => {
+                        const palette = colorFor(d.avgDays);
+                        const bucket =
+                          d.avgDays <= 2 ? 'Baja' : d.avgDays <= 5 ? 'Media' : 'Alta';
+                        return (
+                          <Cell
+                            key={i}
+                            fill={`url(#rev-${bucket})`}
+                            stroke={palette.solid}
+                            strokeOpacity={0}
+                          />
+                        );
+                      })}
+                      <LabelList
+                        dataKey="avgDays"
+                        position="right"
+                        fontSize={12}
+                        fontWeight={800}
+                        fill="hsl(var(--foreground))"
+                        offset={8}
+                        formatter={(v: any) => `${v} d`}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-0.5">
+      <span
+        className="h-2 w-2 rounded-full"
+        style={{ background: color, boxShadow: `0 0 6px ${color}66` }}
+      />
+      <span className="font-semibold text-foreground">{label}</span>
+    </span>
   );
 }

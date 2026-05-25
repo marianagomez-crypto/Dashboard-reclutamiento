@@ -40,10 +40,10 @@ import {
   DROP_REASONS,
   FINAL_STATUSES,
   FUENTES,
-  RECRUITERS,
   STAGES,
   STAGE_COLORS,
   type Candidate,
+  type CatalogItem,
   type FinalStatus,
   type Stage,
   type Vacancy,
@@ -54,6 +54,7 @@ import { exportToExcel, exportToPdf } from '@/lib/export';
 interface Props {
   initialCandidates: Candidate[];
   vacancies: Vacancy[];
+  recruiters: CatalogItem[];
 }
 
 const FINAL_BADGE: Record<FinalStatus, 'success' | 'destructive' | 'outline' | 'warning'> = {
@@ -63,10 +64,22 @@ const FINAL_BADGE: Record<FinalStatus, 'success' | 'destructive' | 'outline' | '
   'No seleccionado': 'warning',
 };
 
-export function CandidatesPage({ initialCandidates, vacancies }: Props) {
+// Extrae el numero del ID (ej "C0023" -> 23) para ordenamiento numerico real.
+// IDs sin parte numerica van al final.
+function numericId(id: string): number {
+  const m = id?.match(/\d+/);
+  return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER;
+}
+
+export function CandidatesPage({ initialCandidates, vacancies, recruiters }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [candidates, setCandidates] = React.useState<Candidate[]>(initialCandidates);
+  // Resincroniza el estado local cuando el server vuelve a renderizar con data nueva
+  // (ej. despues de "Sincronizar con Airtable" en el topbar).
+  React.useEffect(() => {
+    setCandidates(initialCandidates);
+  }, [initialCandidates]);
   const [search, setSearch] = React.useState(searchParams.get('q') || '');
   const [stage, setStage] = React.useState<string>('all');
   const [source, setSource] = React.useState<string>('all');
@@ -83,17 +96,20 @@ export function CandidatesPage({ initialCandidates, vacancies }: Props) {
 
   const filtered = React.useMemo(() => {
     const q = search.toLowerCase().trim();
-    return candidates.filter((c) => {
-      if (stage !== 'all' && c.stage !== stage) return false;
-      if (source !== 'all' && c.source !== source) return false;
-      if (vacancy !== 'all' && c.vacancyId !== vacancy) return false;
-      if (recruiter !== 'all' && c.recruiter !== recruiter) return false;
-      if (q) {
-        const hay = `${c.name} ${c.id} ${c.recruiter || ''} ${c.vacancyId || ''}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
+    return candidates
+      .filter((c) => {
+        if (stage !== 'all' && c.stage !== stage) return false;
+        if (source !== 'all' && c.source !== source) return false;
+        if (vacancy !== 'all' && c.vacancyId !== vacancy) return false;
+        if (recruiter !== 'all' && c.recruiter !== recruiter) return false;
+        if (q) {
+          const hay = `${c.name} ${c.id} ${c.recruiter || ''} ${c.vacancyId || ''}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      })
+      // Orden ascendente por ID numerico real (C0001, C0002, ..., C0010)
+      .sort((a, b) => numericId(a.id) - numericId(b.id));
   }, [candidates, search, stage, source, vacancy, recruiter]);
 
   async function updateStage(id: string, newStage: string) {
@@ -260,9 +276,9 @@ export function CandidatesPage({ initialCandidates, vacancies }: Props) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los reclutadores</SelectItem>
-                {RECRUITERS.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {r}
+                {recruiters.map((r) => (
+                  <SelectItem key={r.id} value={r.name}>
+                    {r.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -415,6 +431,7 @@ export function CandidatesPage({ initialCandidates, vacancies }: Props) {
         open={creating}
         onOpenChange={setCreating}
         vacancies={vacancies}
+        recruiters={recruiters}
         onCreated={(c) => setCandidates((arr) => [c, ...arr])}
       />
 
@@ -422,6 +439,7 @@ export function CandidatesPage({ initialCandidates, vacancies }: Props) {
         candidate={editing}
         onOpenChange={(v) => !v && setEditing(null)}
         vacancies={vacancies}
+        recruiters={recruiters}
         onUpdated={(updated) =>
           setCandidates((arr) =>
             arr.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)),
@@ -455,10 +473,12 @@ function NewCandidateDialog({
   open,
   onOpenChange,
   vacancies,
+  recruiters,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  recruiters: CatalogItem[];
   vacancies: Vacancy[];
   onCreated: (c: Candidate) => void;
 }) {
@@ -483,7 +503,7 @@ function NewCandidateDialog({
           finalStatus: data.finalStatus || 'En proceso',
         }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => ({ error: `Error ${res.status}` }));
       if (!res.ok) throw new Error(json.error || 'Error');
       onCreated(json.data);
       toast.success('Candidato creado');
@@ -580,9 +600,9 @@ function NewCandidateDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">—</SelectItem>
-                  {RECRUITERS.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
+                  {recruiters.map((r) => (
+                    <SelectItem key={r.id} value={r.name}>
+                      {r.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -608,11 +628,13 @@ function EditCandidateDialog({
   candidate,
   onOpenChange,
   vacancies,
+  recruiters,
   onUpdated,
 }: {
   candidate: Candidate | null;
   onOpenChange: (v: boolean) => void;
   vacancies: Vacancy[];
+  recruiters: CatalogItem[];
   onUpdated: (c: Candidate) => void;
 }) {
   const router = useRouter();
@@ -764,9 +786,9 @@ function EditCandidateDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">—</SelectItem>
-                  {RECRUITERS.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
+                  {recruiters.map((r) => (
+                    <SelectItem key={r.id} value={r.name}>
+                      {r.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
