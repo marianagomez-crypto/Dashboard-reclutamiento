@@ -9,6 +9,8 @@ import type {
   CatalogItem,
   Ingreso,
   Notification,
+  ReviewTime,
+  SalaryRange,
   Source,
   StageMovement,
   User,
@@ -36,6 +38,8 @@ interface Store {
   seniorities: CatalogItem[];
   hiringManagers: CatalogItem[];
   recruiters: CatalogItem[];
+  salaryRanges: SalaryRange[];
+  reviewTimes: ReviewTime[];
 }
 
 declare global {
@@ -109,6 +113,10 @@ function buildInitial(): Store {
     { id: 'R0002', recordId: 'rec_seed_r2', name: 'Mayra Pereira' },
   ];
 
+  // Seeds vacios en modo mock (rango salarial y tiempos de revision)
+  const salaryRanges: SalaryRange[] = [];
+  const reviewTimes: ReviewTime[] = [];
+
   return {
     users,
     candidates,
@@ -121,6 +129,8 @@ function buildInitial(): Store {
     seniorities,
     hiringManagers,
     recruiters,
+    salaryRanges,
+    reviewTimes,
   };
 }
 

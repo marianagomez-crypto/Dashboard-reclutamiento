@@ -240,8 +240,16 @@ export class MockRepository implements Repository {
     data: Omit<StageMovement, 'id' | 'recordId'> & { id?: string },
   ): Promise<StageMovement> {
     const store = getStore();
-    const id =
-      data.id || `MV${String(store.movements.length + 1).padStart(4, '0')}`;
+    // ID autoincremental MV0001, MV0002, ... basado en el max existente
+    let maxN = 0;
+    for (const m of store.movements) {
+      const mt = m.id.match(/^MV(\d{1,})$/);
+      if (mt) {
+        const n = parseInt(mt[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    const id = data.id || `MV${String(maxN + 1).padStart(4, '0')}`;
     const m: StageMovement = {
       id,
       recordId: `rec_${uid('mov')}`,
@@ -274,22 +282,138 @@ export class MockRepository implements Repository {
 
   // ---- Sources ----
   async listSources(): Promise<Source[]> {
-    return getStore().sources;
+    return [...getStore().sources];
+  }
+
+  async createSource(data: Omit<Source, 'id'>): Promise<Source> {
+    // ID autoincremental F0001, F0002, ...
+    const store = getStore();
+    let maxN = 0;
+    for (const s of store.sources) {
+      const m = (s.sourceId || '').match(/^F(\d{1,})$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    const item: Source = {
+      ...data,
+      id: `rec_${uid('src')}`,
+      sourceId: data.sourceId || `F${String(maxN + 1).padStart(4, '0')}`,
+    };
+    store.sources.unshift(item);
+    return item;
+  }
+
+  async updateSource(recordId: string, patch: Partial<Source>): Promise<Source> {
+    const item = getStore().sources.find((x) => x.id === recordId);
+    if (!item) throw new Error('Fuente no encontrada');
+    Object.assign(item, patch);
+    return item;
+  }
+
+  async deleteSource(recordId: string): Promise<void> {
+    const store = getStore();
+    store.sources = store.sources.filter((x) => x.id !== recordId);
   }
 
   // ---- Ingresos ----
   async listIngresos(): Promise<Ingreso[]> {
-    return getStore().ingresos;
+    return [...getStore().ingresos];
   }
 
-  // ---- Salary ranges (stub en mock) ----
+  async createIngreso(data: Omit<Ingreso, 'id'>): Promise<Ingreso> {
+    const item: Ingreso = {
+      ...data,
+      id: `rec_${uid('ing')}`,
+    };
+    getStore().ingresos.unshift(item);
+    return item;
+  }
+
+  async updateIngreso(
+    recordId: string,
+    patch: Partial<Ingreso>,
+  ): Promise<Ingreso> {
+    const item = getStore().ingresos.find((x) => x.id === recordId);
+    if (!item) throw new Error('Ingreso no encontrado');
+    Object.assign(item, patch);
+    return item;
+  }
+
+  async deleteIngreso(recordId: string): Promise<void> {
+    const store = getStore();
+    store.ingresos = store.ingresos.filter((x) => x.id !== recordId);
+  }
+
+  // ---- Salary ranges ----
   async listSalaryRanges(): Promise<SalaryRange[]> {
-    return [];
+    return [...getStore().salaryRanges];
   }
 
-  // ---- Review times (stub en mock) ----
+  async createSalaryRange(
+    data: Omit<SalaryRange, 'id'>,
+  ): Promise<SalaryRange> {
+    const item: SalaryRange = {
+      ...data,
+      id: `rec_${uid('sr')}`,
+    };
+    getStore().salaryRanges.unshift(item);
+    return item;
+  }
+
+  async updateSalaryRange(
+    recordId: string,
+    patch: Partial<SalaryRange>,
+  ): Promise<SalaryRange> {
+    const item = getStore().salaryRanges.find((x) => x.id === recordId);
+    if (!item) throw new Error('Rango salarial no encontrado');
+    Object.assign(item, patch);
+    return item;
+  }
+
+  async deleteSalaryRange(recordId: string): Promise<void> {
+    const store = getStore();
+    store.salaryRanges = store.salaryRanges.filter((x) => x.id !== recordId);
+  }
+
+  // ---- Review times ----
   async listReviewTimes(): Promise<ReviewTime[]> {
-    return [];
+    return [...getStore().reviewTimes];
+  }
+
+  async createReviewTime(data: Omit<ReviewTime, 'id'>): Promise<ReviewTime> {
+    const store = getStore();
+    let maxN = 0;
+    for (const rt of store.reviewTimes) {
+      const m = (rt.reviewId || '').match(/^RV(\d{1,})$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    const item: ReviewTime = {
+      ...data,
+      id: `rec_${uid('rev')}`,
+      reviewId: data.reviewId || `RV${String(maxN + 1).padStart(4, '0')}`,
+    };
+    store.reviewTimes.unshift(item);
+    return item;
+  }
+
+  async updateReviewTime(
+    recordId: string,
+    patch: Partial<ReviewTime>,
+  ): Promise<ReviewTime> {
+    const item = getStore().reviewTimes.find((x) => x.id === recordId);
+    if (!item) throw new Error('Registro de revisión no encontrado');
+    Object.assign(item, patch);
+    return item;
+  }
+
+  async deleteReviewTime(recordId: string): Promise<void> {
+    const store = getStore();
+    store.reviewTimes = store.reviewTimes.filter((x) => x.id !== recordId);
   }
 
   // ---- Catalogos maestros ----

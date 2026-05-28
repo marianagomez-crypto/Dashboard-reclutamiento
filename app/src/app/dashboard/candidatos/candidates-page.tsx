@@ -88,16 +88,48 @@ export function CandidatesPage({ initialCandidates, vacancies, recruiters }: Pro
   const [creating, setCreating] = React.useState(false);
   const [editing, setEditing] = React.useState<Candidate | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState<Candidate | null>(null);
+  const [tab, setTab] = React.useState<'en-proceso' | 'finalizados'>('en-proceso');
 
   const vacanciesById = React.useMemo(
     () => new Map(vacancies.map((v) => [v.id, v])),
     [vacancies],
   );
 
+  // Un candidato está "finalizado" si tiene un estado final cerrado.
+  const isFinished = (c: Candidate) =>
+    c.finalStatus === 'Contratado' ||
+    c.finalStatus === 'Se cayó' ||
+    c.finalStatus === 'No seleccionado';
+
+  // Conteos por categoria (para los badges de los tabs). Respetan los demás
+  // filtros (busqueda, etapa, etc.) pero NO el tab activo.
+  const tabCounts = React.useMemo(() => {
+    const q = search.toLowerCase().trim();
+    let enProceso = 0;
+    let finalizados = 0;
+    for (const c of candidates) {
+      if (stage !== 'all' && c.stage !== stage) continue;
+      if (source !== 'all' && c.source !== source) continue;
+      if (vacancy !== 'all' && c.vacancyId !== vacancy) continue;
+      if (recruiter !== 'all' && c.recruiter !== recruiter) continue;
+      if (q) {
+        const hay = `${c.name} ${c.id} ${c.recruiter || ''} ${c.vacancyId || ''}`.toLowerCase();
+        if (!hay.includes(q)) continue;
+      }
+      if (isFinished(c)) finalizados += 1;
+      else enProceso += 1;
+    }
+    return { enProceso, finalizados };
+  }, [candidates, search, stage, source, vacancy, recruiter]);
+
   const filtered = React.useMemo(() => {
     const q = search.toLowerCase().trim();
     return candidates
       .filter((c) => {
+        // Filtro por tab (estado del candidato)
+        const finished = isFinished(c);
+        if (tab === 'en-proceso' && finished) return false;
+        if (tab === 'finalizados' && !finished) return false;
         if (stage !== 'all' && c.stage !== stage) return false;
         if (source !== 'all' && c.source !== source) return false;
         if (vacancy !== 'all' && c.vacancyId !== vacancy) return false;
@@ -110,9 +142,24 @@ export function CandidatesPage({ initialCandidates, vacancies, recruiters }: Pro
       })
       // Orden ascendente por ID numerico real (C0001, C0002, ..., C0010)
       .sort((a, b) => numericId(a.id) - numericId(b.id));
-  }, [candidates, search, stage, source, vacancy, recruiter]);
+  }, [candidates, search, stage, source, vacancy, recruiter, tab]);
 
-  async function updateStage(id: string, newStage: string) {
+  // Cambio de etapa con fecha: se abre un dialogo (calendario) antes de aplicar.
+  const [stageChange, setStageChange] = React.useState<{
+    candidate: Candidate;
+    newStage: Stage;
+  } | null>(null);
+  const [stageDate, setStageDate] = React.useState(() =>
+    new Date().toISOString().slice(0, 10),
+  );
+
+  function openStageChange(c: Candidate, newStage: string) {
+    if (newStage === c.stage) return; // no cambió, no hacemos nada
+    setStageChange({ candidate: c, newStage: newStage as Stage });
+    setStageDate(new Date().toISOString().slice(0, 10));
+  }
+
+  async function updateStage(id: string, newStage: string, date: string) {
     const prev = candidates;
     setCandidates((arr) =>
       arr.map((c) => (c.id === id ? { ...c, stage: newStage as Stage } : c)),
@@ -121,15 +168,22 @@ export function CandidatesPage({ initialCandidates, vacancies, recruiters }: Pro
       const res = await fetch(`/api/candidates/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: newStage }),
+        body: JSON.stringify({ stage: newStage, stageDate: date }),
       });
       if (!res.ok) throw new Error('fail');
-      toast.success('Etapa actualizada', { description: newStage });
+      toast.success('Etapa actualizada', { description: `${newStage} · ${date}` });
       router.refresh();
     } catch {
       setCandidates(prev);
       toast.error('No se pudo actualizar');
     }
+  }
+
+  async function confirmStageChange() {
+    if (!stageChange || !stageDate) return;
+    const { candidate, newStage } = stageChange;
+    setStageChange(null);
+    await updateStage(candidate.id, newStage, stageDate);
   }
 
   async function handleDelete() {
@@ -216,6 +270,50 @@ export function CandidatesPage({ initialCandidates, vacancies, recruiters }: Pro
             Nuevo candidato
           </Button>
         </div>
+      </div>
+
+      {/* Tabs: En proceso / Finalizados */}
+      <div className="inline-flex rounded-xl border border-border bg-muted/40 p-1">
+        <button
+          type="button"
+          onClick={() => setTab('en-proceso')}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+            tab === 'en-proceso'
+              ? 'bg-card text-foreground shadow-soft'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          En proceso
+          <span
+            className={`rounded-full px-1.5 text-xs tabular-nums ${
+              tab === 'en-proceso'
+                ? 'bg-brand-blue-100 text-brand-blue-700 dark:bg-brand-blue-600/30 dark:text-brand-blue-100'
+                : 'bg-muted text-muted-foreground'
+            }`}
+          >
+            {tabCounts.enProceso}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('finalizados')}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+            tab === 'finalizados'
+              ? 'bg-card text-foreground shadow-soft'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Finalizados
+          <span
+            className={`rounded-full px-1.5 text-xs tabular-nums ${
+              tab === 'finalizados'
+                ? 'bg-brand-aqua-100 text-brand-aqua-700 dark:bg-brand-aqua-600/30 dark:text-brand-aqua-100'
+                : 'bg-muted text-muted-foreground'
+            }`}
+          >
+            {tabCounts.finalizados}
+          </span>
+        </button>
       </div>
 
       {/* Filtros */}
@@ -357,7 +455,7 @@ export function CandidatesPage({ initialCandidates, vacancies, recruiters }: Pro
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <Select value={c.stage} onValueChange={(v) => updateStage(c.id, v)}>
+                        <Select value={c.stage} onValueChange={(v) => openStageChange(c, v)}>
                           <SelectTrigger className="h-8 w-[160px] text-xs">
                             <span
                               className="mr-1.5 h-2 w-2 rounded-full"
@@ -465,6 +563,52 @@ export function CandidatesPage({ initialCandidates, vacancies, recruiters }: Pro
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Fecha de la etapa (calendario) al cambiar la etapa de un candidato */}
+      <Dialog
+        open={!!stageChange}
+        onOpenChange={(v) => !v && setStageChange(null)}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Fecha en la que se realizó {stageChange?.newStage}
+            </DialogTitle>
+            <DialogDescription>
+              {stageChange?.candidate.name} ({stageChange?.candidate.id}) pasa de{' '}
+              <span className="font-semibold text-foreground">
+                {stageChange?.candidate.stage}
+              </span>{' '}
+              a{' '}
+              <span className="font-semibold text-foreground">
+                {stageChange?.newStage}
+              </span>
+              . Seleccioná la fecha en que ocurrió.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="stage-date">Fecha</Label>
+            <Input
+              id="stage-date"
+              type="date"
+              value={stageDate}
+              onChange={(e) => setStageDate(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setStageChange(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="gradient"
+              onClick={confirmStageChange}
+              disabled={!stageDate}
+            >
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -539,11 +683,13 @@ function NewCandidateDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sin vacante</SelectItem>
-                  {vacancies.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.id} · {v.title}
-                    </SelectItem>
-                  ))}
+                  {vacancies
+                    .filter((v) => v.status !== 'Cerrada')
+                    .map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.id} · {v.title}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -713,11 +859,15 @@ function EditCandidateDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sin vacante</SelectItem>
-                  {vacancies.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.id} · {v.title}
-                    </SelectItem>
-                  ))}
+                  {vacancies
+                    .filter(
+                      (v) => v.status !== 'Cerrada' || v.id === form.vacancyId,
+                    )
+                    .map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.id} · {v.title}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>

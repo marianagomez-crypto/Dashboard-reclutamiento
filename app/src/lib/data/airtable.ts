@@ -132,7 +132,7 @@ const F = {
     candidateId: 'ID Candidato',
     cvSentAt: 'Fecha de envio de cv',
     returnedAt: 'Fecha de Retorno de CV',
-    headName: 'Nombre del Head',
+    headName: 'Hiring Manager',
   },
 };
 
@@ -482,9 +482,23 @@ export class AirtableRepository implements Repository {
     return records[0]?.id ?? null;
   }
 
+  // Siguiente ID autoincremental MV0001, MV0002, ...
+  private async nextMovementId(): Promise<string> {
+    const records = await this.selectAll(env.airtable.tables.stages);
+    let maxN = 0;
+    for (const r of records) {
+      const idStr = String(r.fields[F.stage.id] || '');
+      const m = idStr.match(/^MV(\d{1,})$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    return `MV${String(maxN + 1).padStart(4, '0')}`;
+  }
+
   async createStageMovement(data: any) {
-    const newId =
-      data.id || `MV${Math.floor(1000 + Math.random() * 9000)}`;
+    const newId = data.id || (await this.nextMovementId());
     const fields: Record<string, any> = {
       [F.stage.id]: newId,
     };
@@ -533,17 +547,74 @@ export class AirtableRepository implements Repository {
   // ============================================================
   async listSources(): Promise<Source[]> {
     const records = await this.selectAll(env.airtable.tables.sources);
-    return records.map((r) => {
-      const f = r.fields;
-      return {
-        id: r.id,
-        sourceId: str(f, F.source.sourceId),
-        vacancyId: str(f, F.source.vacancyId),
-        name: str(f, F.source.name) || '—',
-        monthlyCost: num(f, F.source.cost),
-        owner: str(f, F.source.owner),
-      };
-    });
+    return records
+      .map((r) => this.sourceFromRecord(r))
+      // Filtra ghost records: sin nombre de fuente real
+      .filter((s) => s.name && s.name.trim() !== '' && s.name !== '—');
+  }
+
+  private sourceFromRecord(r: Airtable.Record<FieldSet>): Source {
+    const f = r.fields;
+    return {
+      id: r.id, // recordId interno (key estable para CRUD)
+      sourceId: str(f, F.source.sourceId),
+      vacancyId: str(f, F.source.vacancyId),
+      name: str(f, F.source.name) || '—',
+      monthlyCost: num(f, F.source.cost),
+      owner: str(f, F.source.owner),
+    };
+  }
+
+  // Siguiente ID autoincremental F0001, F0002, ...
+  private async nextSourceId(): Promise<string> {
+    const records = await this.selectAll(env.airtable.tables.sources);
+    let maxN = 0;
+    for (const r of records) {
+      const idStr = String(r.fields[F.source.sourceId] || '');
+      const m = idStr.match(/^F(\d{1,})$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    return `F${String(maxN + 1).padStart(4, '0')}`;
+  }
+
+  async createSource(data: Omit<Source, 'id'>): Promise<Source> {
+    const newId = data.sourceId || (await this.nextSourceId());
+    const fields: Record<string, any> = {
+      [F.source.sourceId]: newId,
+    };
+    if (data.vacancyId !== undefined) fields[F.source.vacancyId] = data.vacancyId;
+    if (data.name !== undefined) fields[F.source.name] = data.name;
+    if (data.monthlyCost !== undefined) fields[F.source.cost] = data.monthlyCost;
+    if (data.owner !== undefined) fields[F.source.owner] = data.owner;
+    const r = (await this.base(env.airtable.tables.sources).create(
+      fields as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.sourceFromRecord(r);
+  }
+
+  async updateSource(
+    recordId: string,
+    patch: Partial<Source>,
+  ): Promise<Source> {
+    const fields: Record<string, any> = {};
+    if (patch.vacancyId !== undefined) fields[F.source.vacancyId] = patch.vacancyId;
+    if (patch.name !== undefined) fields[F.source.name] = patch.name;
+    if (patch.monthlyCost !== undefined) fields[F.source.cost] = patch.monthlyCost;
+    if (patch.owner !== undefined) fields[F.source.owner] = patch.owner;
+    const r = (await this.base(env.airtable.tables.sources).update(
+      recordId,
+      fields,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.sourceFromRecord(r);
+  }
+
+  async deleteSource(recordId: string): Promise<void> {
+    await this.base(env.airtable.tables.sources).destroy(recordId);
   }
 
   // ============================================================
@@ -551,20 +622,69 @@ export class AirtableRepository implements Repository {
   // ============================================================
   async listIngresos(): Promise<Ingreso[]> {
     const records = await this.selectAll(env.airtable.tables.ingresos);
-    return records.map((r) => {
-      const f = r.fields;
-      return {
-        id: r.id,
-        candidateId: str(f, F.ingreso.candidateId) || '',
-        finalSalary: num(f, F.ingreso.finalSalary),
-        startDate: str(f, F.ingreso.startDate) || '',
-        stillEmployed: bool(f, F.ingreso.stillEmployed),
-        endDate: str(f, F.ingreso.endDate),
-        passedProbation: bool(f, F.ingreso.passedProbation),
-        performance: str(f, F.ingreso.performance),
-        leaderComment: str(f, F.ingreso.leaderComment),
-      };
-    });
+    return records
+      .map((r) => this.ingresoFromRecord(r))
+      // Filtra ghost records (filas vacias en Airtable sin ID Candidato)
+      .filter((i) => i.candidateId && i.candidateId.trim() !== '');
+  }
+
+  private ingresoFromRecord(r: Airtable.Record<FieldSet>): Ingreso {
+    const f = r.fields;
+    return {
+      id: r.id,
+      candidateId: str(f, F.ingreso.candidateId) || '',
+      finalSalary: num(f, F.ingreso.finalSalary),
+      startDate: str(f, F.ingreso.startDate) || '',
+      stillEmployed: bool(f, F.ingreso.stillEmployed),
+      endDate: str(f, F.ingreso.endDate),
+      passedProbation: bool(f, F.ingreso.passedProbation),
+      performance: str(f, F.ingreso.performance),
+      leaderComment: str(f, F.ingreso.leaderComment),
+    };
+  }
+
+  private ingresoFieldsForWrite(data: Partial<Ingreso>): Record<string, any> {
+    const fields: Record<string, any> = {};
+    if (data.candidateId !== undefined) fields[F.ingreso.candidateId] = data.candidateId;
+    if (data.finalSalary !== undefined) fields[F.ingreso.finalSalary] = data.finalSalary;
+    if (data.startDate !== undefined) fields[F.ingreso.startDate] = data.startDate;
+    // boolean -> 'Sí'/'No'; null -> limpia el campo; undefined -> no se toca
+    if (data.stillEmployed !== undefined)
+      fields[F.ingreso.stillEmployed] =
+        data.stillEmployed === null ? null : data.stillEmployed ? 'Sí' : 'No';
+    if (data.endDate !== undefined) fields[F.ingreso.endDate] = data.endDate;
+    if (data.passedProbation !== undefined)
+      fields[F.ingreso.passedProbation] =
+        data.passedProbation === null ? null : data.passedProbation ? 'Sí' : 'No';
+    if (data.performance !== undefined) fields[F.ingreso.performance] = data.performance;
+    if (data.leaderComment !== undefined) fields[F.ingreso.leaderComment] = data.leaderComment;
+    return fields;
+  }
+
+  async createIngreso(data: Omit<Ingreso, 'id'>): Promise<Ingreso> {
+    const fields = this.ingresoFieldsForWrite(data);
+    const r = (await this.base(env.airtable.tables.ingresos).create(
+      fields as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.ingresoFromRecord(r);
+  }
+
+  async updateIngreso(
+    recordId: string,
+    patch: Partial<Ingreso>,
+  ): Promise<Ingreso> {
+    const fields = this.ingresoFieldsForWrite(patch);
+    const r = (await this.base(env.airtable.tables.ingresos).update(
+      recordId,
+      fields,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.ingresoFromRecord(r);
+  }
+
+  async deleteIngreso(recordId: string): Promise<void> {
+    await this.base(env.airtable.tables.ingresos).destroy(recordId);
   }
 
   // ============================================================
@@ -572,16 +692,56 @@ export class AirtableRepository implements Repository {
   // ============================================================
   async listSalaryRanges(): Promise<SalaryRange[]> {
     const records = await this.selectAll(env.airtable.tables.salaryRange);
-    return records.map((r) => {
-      const f = r.fields;
-      return {
-        id: r.id,
-        vacancyId: str(f, F.salaryRange.vacancyId) || '',
-        min: num(f, F.salaryRange.min),
-        max: num(f, F.salaryRange.max),
-        status: str(f, F.salaryRange.status),
-      };
-    });
+    return records
+      .map((r) => this.salaryRangeFromRecord(r))
+      // Filtra ghost records (filas vacias en Airtable sin ID VACANTE).
+      .filter((r) => r.vacancyId && r.vacancyId.trim() !== '');
+  }
+
+  private salaryRangeFromRecord(r: Airtable.Record<FieldSet>): SalaryRange {
+    const f = r.fields;
+    return {
+      id: r.id, // recordId interno (key estable para CRUD)
+      vacancyId: str(f, F.salaryRange.vacancyId) || '',
+      min: num(f, F.salaryRange.min),
+      max: num(f, F.salaryRange.max),
+      status: str(f, F.salaryRange.status),
+    };
+  }
+
+  async createSalaryRange(data: Omit<SalaryRange, 'id'>): Promise<SalaryRange> {
+    const fields: Record<string, any> = {
+      [F.salaryRange.vacancyId]: data.vacancyId,
+    };
+    if (data.min !== undefined) fields[F.salaryRange.min] = data.min;
+    if (data.max !== undefined) fields[F.salaryRange.max] = data.max;
+    if (data.status !== undefined) fields[F.salaryRange.status] = data.status;
+    const r = (await this.base(env.airtable.tables.salaryRange).create(
+      fields as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.salaryRangeFromRecord(r);
+  }
+
+  async updateSalaryRange(
+    recordId: string,
+    patch: Partial<SalaryRange>,
+  ): Promise<SalaryRange> {
+    const fields: Record<string, any> = {};
+    if (patch.vacancyId !== undefined) fields[F.salaryRange.vacancyId] = patch.vacancyId;
+    if (patch.min !== undefined) fields[F.salaryRange.min] = patch.min;
+    if (patch.max !== undefined) fields[F.salaryRange.max] = patch.max;
+    if (patch.status !== undefined) fields[F.salaryRange.status] = patch.status;
+    const r = (await this.base(env.airtable.tables.salaryRange).update(
+      recordId,
+      fields,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.salaryRangeFromRecord(r);
+  }
+
+  async deleteSalaryRange(recordId: string): Promise<void> {
+    await this.base(env.airtable.tables.salaryRange).destroy(recordId);
   }
 
   // ============================================================
@@ -589,17 +749,75 @@ export class AirtableRepository implements Repository {
   // ============================================================
   async listReviewTimes(): Promise<ReviewTime[]> {
     const records = await this.selectAll(env.airtable.tables.reviewTime);
-    return records.map((r) => {
-      const f = r.fields;
-      return {
-        id: r.id,
-        reviewId: str(f, F.reviewTime.reviewId) || r.id,
-        candidateId: str(f, F.reviewTime.candidateId),
-        cvSentAt: str(f, F.reviewTime.cvSentAt),
-        returnedAt: str(f, F.reviewTime.returnedAt),
-        headName: str(f, F.reviewTime.headName),
-      };
-    });
+    return records
+      .map((r) => this.reviewTimeFromRecord(r))
+      // Filtra ghost records: filas vacias sin candidato ni head
+      .filter((rt) => rt.candidateId || rt.headName);
+  }
+
+  private reviewTimeFromRecord(r: Airtable.Record<FieldSet>): ReviewTime {
+    const f = r.fields;
+    return {
+      id: r.id, // recordId interno (key estable para CRUD)
+      reviewId: str(f, F.reviewTime.reviewId) || r.id,
+      candidateId: str(f, F.reviewTime.candidateId),
+      cvSentAt: str(f, F.reviewTime.cvSentAt),
+      returnedAt: str(f, F.reviewTime.returnedAt),
+      headName: str(f, F.reviewTime.headName),
+    };
+  }
+
+  // Siguiente ID autoincremental RV0001, RV0002, ...
+  private async nextReviewId(): Promise<string> {
+    const records = await this.selectAll(env.airtable.tables.reviewTime);
+    let maxN = 0;
+    for (const r of records) {
+      const idStr = String(r.fields[F.reviewTime.reviewId] || '');
+      const m = idStr.match(/^RV(\d{1,})$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    return `RV${String(maxN + 1).padStart(4, '0')}`;
+  }
+
+  private reviewTimeFieldsForWrite(data: Partial<ReviewTime>): Record<string, any> {
+    const fields: Record<string, any> = {};
+    if (data.candidateId !== undefined) fields[F.reviewTime.candidateId] = data.candidateId;
+    if (data.cvSentAt !== undefined) fields[F.reviewTime.cvSentAt] = data.cvSentAt;
+    if (data.returnedAt !== undefined) fields[F.reviewTime.returnedAt] = data.returnedAt;
+    if (data.headName !== undefined) fields[F.reviewTime.headName] = data.headName;
+    return fields;
+  }
+
+  async createReviewTime(data: Omit<ReviewTime, 'id'>): Promise<ReviewTime> {
+    const newId = data.reviewId || (await this.nextReviewId());
+    const fields = {
+      [F.reviewTime.reviewId]: newId,
+      ...this.reviewTimeFieldsForWrite(data),
+    };
+    const r = (await this.base(env.airtable.tables.reviewTime).create(
+      fields as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.reviewTimeFromRecord(r);
+  }
+
+  async updateReviewTime(
+    recordId: string,
+    patch: Partial<ReviewTime>,
+  ): Promise<ReviewTime> {
+    const r = (await this.base(env.airtable.tables.reviewTime).update(
+      recordId,
+      this.reviewTimeFieldsForWrite(patch),
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.reviewTimeFromRecord(r);
+  }
+
+  async deleteReviewTime(recordId: string): Promise<void> {
+    await this.base(env.airtable.tables.reviewTime).destroy(recordId);
   }
 
   // ============================================================

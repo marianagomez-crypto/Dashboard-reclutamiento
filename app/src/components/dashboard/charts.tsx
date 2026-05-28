@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import {
   Area,
   AreaChart,
@@ -25,7 +26,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { STAGE_COLORS, type Stage } from '@/lib/types';
-import { Filter, UserX, TrendingDown, Lightbulb } from 'lucide-react';
+import { Filter, UserX, TrendingDown, Lightbulb, ChevronDown } from 'lucide-react';
 
 const PIE_COLORS = ['#31359C', '#00A29B', '#FDCA56', '#6873D7', '#36B7B3', '#D1A646', '#98A9DF'];
 
@@ -632,6 +633,485 @@ export function DropReasonsChart({
   );
 }
 
+// ============================================================================
+// Costo de fuentes por vacante (stacked bar horizontal por canal)
+// ============================================================================
+export interface SourceCostRow {
+  vacancyId: string;
+  vacancyTitle: string;
+  total: number;
+  // Costo desagregado por canal (Linkedin: 200, Bumeran: 100, ...)
+  byChannel: Record<string, number>;
+}
+
+// Mismo color que usa SourcesPage para los chips de canal (consistencia visual).
+const CHANNEL_COLOR_PALETTE: Record<string, string> = {
+  Linkedin: '#31359C',
+  Bumeran: '#00A29B',
+  Facebook: '#6873D7',
+  Referidos: '#36B7B3',
+  'Universidad de Lima': '#FDCA56',
+  'Universidad del Pacífico': '#98A9DF',
+};
+const FALLBACK_COLORS = ['#D14646', '#987933', '#4453A0', '#A9DAE6', '#D1A646'];
+
+function channelColor(name: string, fallbackIndex: number): string {
+  return (
+    CHANNEL_COLOR_PALETTE[name] ||
+    FALLBACK_COLORS[fallbackIndex % FALLBACK_COLORS.length]
+  );
+}
+
+export function SourceCostByVacancyChart({
+  data,
+  channels,
+}: {
+  data: SourceCostRow[];
+  channels: string[];
+}) {
+  // Solo mostrar vacantes con costo > 0
+  const filtered = data.filter((d) => d.total > 0);
+  const sorted = [...filtered].sort((a, b) => b.total - a.total);
+  const maxTotal = Math.max(...sorted.map((d) => d.total), 1);
+  const xMax = Math.ceil((maxTotal * 1.15) / 100) * 100 || 100;
+
+  const total = sorted.reduce((acc, d) => acc + d.total, 0);
+  const top = sorted[0];
+
+  // Asigna color a cada canal del dataset
+  const colorByChannel: Record<string, string> = {};
+  channels.forEach((c, i) => {
+    colorByChannel[c] = channelColor(c, i);
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Costo de fuentes por vacante</CardTitle>
+        <CardDescription>
+          Inversión mensual en canales de adquisición · stacked por canal
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {sorted.length === 0 ? (
+          <div className="flex h-32 flex-col items-center justify-center rounded-xl bg-muted/40 p-6 text-center">
+            <p className="text-sm font-medium text-muted-foreground">
+              Sin fuentes pagas registradas
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground/70">
+              Cuando alguna fuente tenga costo mensual mayor que cero aparecerá aquí.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Stat cards */}
+            <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Vacantes con costo
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold tabular-nums">
+                  {sorted.length}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Total mensual
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold tabular-nums">
+                  {formatPEN(total)}
+                </p>
+              </div>
+              {top && (
+                <div className="col-span-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 sm:col-span-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">
+                    Más cara
+                  </p>
+                  <p
+                    className="mt-0.5 truncate font-display text-sm font-bold text-destructive"
+                    title={top.vacancyTitle}
+                  >
+                    {top.vacancyTitle}
+                  </p>
+                  <p className="text-[10px] text-destructive/80 tabular-nums">
+                    {formatPEN(top.total)} / mes
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Leyenda de canales */}
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+              {channels.map((c) => (
+                <LegendDot key={c} color={colorByChannel[c]} label={c} />
+              ))}
+            </div>
+
+            {/* Bar chart stacked */}
+            <div className="w-full rounded-xl bg-muted/40 p-3">
+              <div
+                style={{
+                  height: Math.max(sorted.length * 52 + 40, 220),
+                }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={sorted}
+                    layout="vertical"
+                    margin={{ left: 8, right: 60, top: 8, bottom: 8 }}
+                    barCategoryGap="22%"
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 4"
+                      stroke="hsl(var(--border))"
+                      horizontal={false}
+                    />
+                    <XAxis
+                      type="number"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                      domain={[0, xMax]}
+                      tickFormatter={(v: any) => `S/ ${v}`}
+                      label={{
+                        value: 'S/',
+                        position: 'insideBottomRight',
+                        offset: -4,
+                        style: { fontSize: 11, fill: 'hsl(var(--muted-foreground))' },
+                      }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="vacancyTitle"
+                      stroke="hsl(var(--foreground))"
+                      tickLine={false}
+                      axisLine={false}
+                      interval={0}
+                      width={220}
+                      tick={<VacancyYAxisTick />}
+                    />
+                    <Tooltip
+                      cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
+                      contentStyle={{
+                        borderRadius: 12,
+                        border: '1px solid hsl(var(--border))',
+                        background: 'hsl(var(--popover))',
+                        fontSize: 12,
+                        boxShadow: '0 10px 40px -10px rgba(0,0,0,0.2)',
+                      }}
+                      formatter={(value: any, name: any) => [formatPEN(Number(value)), name]}
+                      labelFormatter={(label: any, payload: any) => {
+                        const row = payload?.[0]?.payload as SourceCostRow | undefined;
+                        if (!row) return label;
+                        return `${row.vacancyTitle} · Total: ${formatPEN(row.total)}`;
+                      }}
+                    />
+                    {channels.map((c) => (
+                      <Bar
+                        key={c}
+                        dataKey={`byChannel.${c}`}
+                        name={c}
+                        stackId="cost"
+                        fill={colorByChannel[c]}
+                        minPointSize={2}
+                      />
+                    ))}
+                    {/* Label con el total al final de cada barra */}
+                    <Bar
+                      dataKey="total"
+                      stackId="total-label"
+                      fill="transparent"
+                      isAnimationActive={false}
+                    >
+                      <LabelList
+                        dataKey="total"
+                        position="right"
+                        offset={8}
+                        fontSize={12}
+                        fontWeight={800}
+                        fill="hsl(var(--foreground))"
+                        formatter={(v: any) => formatPEN(Number(v))}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============================================================================
+// Comparacion salario final vs banda salarial (range markers / lollipop)
+// ============================================================================
+export interface SalaryComparisonRow {
+  candidateId: string;
+  candidateName: string;
+  vacancyTitle: string;
+  min: number;
+  max: number;
+  final: number;
+}
+
+function formatPEN(n: number): string {
+  return new Intl.NumberFormat('es-PE', {
+    style: 'currency',
+    currency: 'PEN',
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+export function SalaryComparisonChart({
+  data,
+  skipped = 0,
+}: {
+  data: SalaryComparisonRow[];
+  skipped?: number;
+}) {
+  // Stats agregadas
+  const within = data.filter((d) => d.final >= d.min && d.final <= d.max).length;
+  const below = data.filter((d) => d.final < d.min).length;
+  const above = data.filter((d) => d.final > d.max).length;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <CardTitle>Salario final vs banda salarial</CardTitle>
+            <CardDescription>
+              Cada barra muestra el rango de su propia vacante. El círculo marca lo que se ofreció.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <LegendDot color="#00A29B" label="Dentro" />
+            <LegendDot color="#FDCA56" label="Bajo el mín." />
+            <LegendDot color="#D14646" label="Sobre el máx." />
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        {data.length === 0 ? (
+          <div className="flex h-32 flex-col items-center justify-center rounded-xl bg-muted/40 p-6 text-center">
+            <p className="text-sm font-medium text-muted-foreground">
+              Sin datos suficientes para comparar
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground/70">
+              Necesitás ingresos con salario final + un rango salarial para esa vacante.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Stats compactas */}
+            <div className="mb-4 grid grid-cols-3 gap-2">
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Dentro del rango
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold text-foreground tabular-nums">
+                  {within}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Bajo el mín.
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold tabular-nums">
+                  {below}
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Sobre el máx.
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold tabular-nums">
+                  {above}
+                </p>
+              </div>
+            </div>
+
+            {/* Filas con escala individual por vacante */}
+            <div className="space-y-6 rounded-xl bg-muted/40 p-4">
+              {data.map((row, i) => (
+                <SalaryRow key={row.candidateId} row={row} index={i} />
+              ))}
+            </div>
+
+            {skipped > 0 && (
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                {skipped}{' '}
+                {skipped === 1
+                  ? 'ingreso fue excluido'
+                  : 'ingresos fueron excluidos'}{' '}
+                por falta de salario final o de rango salarial en su vacante.
+              </p>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// La banda ocupa el 80% central. El 10% a cada lado se reserva para mostrar
+// el dot cuando el salario final cae fuera del rango (below / above).
+const BAND_START_PCT = 10;
+const BAND_END_PCT = 90;
+const BAND_WIDTH_PCT = BAND_END_PCT - BAND_START_PCT; // 80
+
+function SalaryRow({ row, index }: { row: SalaryComparisonRow; index: number }) {
+  const { min, max, final } = row;
+  const range = max - min;
+
+  let status: 'within' | 'below' | 'above' = 'within';
+  if (final < min) status = 'below';
+  else if (final > max) status = 'above';
+
+  const dotColor =
+    status === 'within' ? '#00A29B' : status === 'below' ? '#FDCA56' : '#D14646';
+
+  // Posicion del dot en el container (0-100%).
+  // - within: lineal dentro del 10%-90% segun (final-min)/(max-min)
+  // - below : 4% (a la izquierda fuera de la banda)
+  // - above : 96% (a la derecha fuera de la banda)
+  let dotLeftPct: number;
+  if (status === 'within') {
+    const t = range > 0 ? (final - min) / range : 0.5;
+    dotLeftPct = BAND_START_PCT + t * BAND_WIDTH_PCT;
+  } else if (status === 'below') {
+    dotLeftPct = 4;
+  } else {
+    dotLeftPct = 96;
+  }
+
+  // Texto del estado
+  const statusText =
+    status === 'within'
+      ? 'Dentro del rango'
+      : status === 'below'
+        ? `${formatPEN(min - final)} bajo el mínimo`
+        : `${formatPEN(final - max)} sobre el máximo`;
+
+  const statusBg =
+    status === 'within'
+      ? 'rgba(0,162,155,0.12)'
+      : status === 'below'
+        ? 'rgba(253,202,86,0.18)'
+        : 'rgba(209,70,70,0.14)';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: Math.min(index * 0.04, 0.3) }}
+    >
+      {/* Header de la fila */}
+      <div className="mb-2.5 flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-foreground" title={row.candidateName}>
+            {row.candidateName}
+          </p>
+          <p className="truncate text-[11px] text-muted-foreground" title={row.vacancyTitle}>
+            {row.vacancyTitle}
+          </p>
+        </div>
+        <span
+          className="rounded-full px-3 py-1 text-[11px] font-semibold tabular-nums"
+          style={{ background: statusBg, color: dotColor }}
+        >
+          {statusText}
+        </span>
+      </div>
+
+      {/* Banda salarial + dot del final */}
+      <div className="relative h-12">
+        {/* Track de fondo sutil del container completo (referencia visual) */}
+        <div className="absolute inset-x-0 top-[18px] h-3 rounded-full bg-foreground/5" />
+
+        {/* La banda salarial: ocupa el 10%-90% del container */}
+        <div
+          className="absolute top-[16px] h-3.5 rounded-full shadow-inner"
+          style={{
+            left: `${BAND_START_PCT}%`,
+            right: `${100 - BAND_END_PCT}%`,
+            background:
+              'linear-gradient(90deg, #BEF7F3 0%, #5CBFBE 50%, #00A29B 100%)',
+            boxShadow: '0 1px 3px rgba(0,162,155,0.25) inset',
+          }}
+        />
+
+        {/* Borde de los extremos de la banda (tickmarks) */}
+        <div
+          className="absolute top-[13px] h-[22px] w-[2.5px] rounded-full"
+          style={{
+            left: `${BAND_START_PCT}%`,
+            transform: 'translateX(-50%)',
+            background: '#00A29B',
+          }}
+        />
+        <div
+          className="absolute top-[13px] h-[22px] w-[2.5px] rounded-full"
+          style={{
+            left: `${BAND_END_PCT}%`,
+            transform: 'translateX(-50%)',
+            background: '#00A29B',
+          }}
+        />
+
+        {/* Labels de min y max en los extremos de la banda */}
+        <span
+          className="absolute top-[40px] text-[11px] font-semibold tabular-nums text-foreground/70"
+          style={{
+            left: `${BAND_START_PCT}%`,
+            transform: 'translateX(-50%)',
+          }}
+        >
+          {formatPEN(min)}
+        </span>
+        <span
+          className="absolute top-[40px] text-[11px] font-semibold tabular-nums text-foreground/70"
+          style={{
+            left: `${BAND_END_PCT}%`,
+            transform: 'translateX(-50%)',
+          }}
+        >
+          {formatPEN(max)}
+        </span>
+
+        {/* Etiqueta del salario final ARRIBA del dot */}
+        <span
+          className="absolute top-0 whitespace-nowrap text-[12px] font-bold tabular-nums"
+          style={{
+            left: `${dotLeftPct}%`,
+            transform: 'translateX(-50%)',
+            color: dotColor,
+          }}
+        >
+          {formatPEN(final)}
+        </span>
+
+        {/* Dot del salario final */}
+        <span
+          className="absolute top-[18px] h-5 w-5 rounded-full border-[3px] border-white shadow-lg transition-transform hover:scale-110 dark:border-zinc-900"
+          style={{
+            left: `${dotLeftPct}%`,
+            transform: 'translateX(-50%)',
+            background: dotColor,
+            boxShadow: `0 0 0 4px ${dotColor}22, 0 4px 12px ${dotColor}66`,
+          }}
+          title={`${formatPEN(final)} — ${statusText}`}
+        />
+      </div>
+    </motion.div>
+  );
+}
+
 // Custom tick para el eje Y del aging chart: wrap a 2 lineas si el texto es largo.
 function VacancyYAxisTick(props: any) {
   const { x, y, payload } = props;
@@ -880,6 +1360,322 @@ export function VacancyAgingChart({ data }: { data: VacancyAgingRow[] }) {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============================================================================
+// Candidatos por vacante divididos en En proceso / Finalizados
+// (stacked horizontal con scroll vertical si hay muchas vacantes)
+// ============================================================================
+export interface CandidatesByStatusRow {
+  vacancyId: string;
+  vacancyTitle: string;
+  enProceso: number;
+  finalizados: number;
+  total: number;
+  // Desglose de finalizados por estado (para el detalle expandible)
+  contratado: number;
+  seCayo: number;
+  noSeleccionado: number;
+}
+
+export function CandidatesByStatusChart({
+  data,
+}: {
+  data: CandidatesByStatusRow[];
+}) {
+  // Muestra todas las vacantes recibidas (incluso con 0 candidatos),
+  // ordenadas por total descendente.
+  const sorted = [...data].sort((a, b) => b.total - a.total);
+
+  const totalProc = sorted.reduce((acc, d) => acc + d.enProceso, 0);
+  const totalFin = sorted.reduce((acc, d) => acc + d.finalizados, 0);
+  const totalAll = totalProc + totalFin;
+
+  // Escala COMPARTIDA: las dos barras (en proceso y finalizados) usan el mismo
+  // maximo, asi se pueden comparar directamente entre si y entre vacantes.
+  const maxShared = Math.max(
+    ...sorted.map((d) => Math.max(d.enProceso, d.finalizados)),
+    1,
+  );
+
+  const PROC_COLOR = '#3B9EE5'; // azul — en proceso
+  const FIN_COLOR = '#D14646'; // rojo — finalizados
+
+  // Fila expandida: que vacante muestra su desglose de finalizados
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
+
+  // Una sub-fila: label + barra + valor. Si onClick existe, es clickeable.
+  const BarLine = ({
+    label,
+    value,
+    color,
+    onClick,
+    expanded,
+  }: {
+    label: string;
+    value: number;
+    color: string;
+    onClick?: () => void;
+    expanded?: boolean;
+  }) => {
+    const clickable = !!onClick && value > 0;
+    return (
+      <div
+        className={`flex items-center gap-3 ${
+          clickable
+            ? '-mx-1 cursor-pointer rounded-md px-1 py-0.5 transition hover:bg-foreground/5'
+            : ''
+        }`}
+        onClick={clickable ? onClick : undefined}
+        role={clickable ? 'button' : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        onKeyDown={
+          clickable
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onClick!();
+                }
+              }
+            : undefined
+        }
+        title={clickable ? 'Ver desglose de finalizados' : undefined}
+      >
+        <span className="w-20 shrink-0 text-xs font-medium" style={{ color }}>
+          {label}
+        </span>
+        <div className="relative h-2.5 min-w-0 flex-1">
+          {value > 0 && (
+            <div
+              className="absolute inset-y-0 left-0 rounded-full"
+              style={{
+                width: `${Math.max((value / maxShared) * 100, 3)}%`,
+                background: color,
+              }}
+            />
+          )}
+        </div>
+        <span className="w-6 shrink-0 text-right text-sm font-semibold tabular-nums text-foreground">
+          {value}
+        </span>
+        {clickable ? (
+          <ChevronDown
+            className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${
+              expanded ? 'rotate-180' : ''
+            }`}
+          />
+        ) : (
+          <span className="w-3.5 shrink-0" />
+        )}
+      </div>
+    );
+  };
+
+  // Mini-barra de un estado dentro del desglose de finalizados
+  const BreakdownRow = ({
+    label,
+    value,
+    finalizados,
+    color,
+  }: {
+    label: string;
+    value: number;
+    finalizados: number;
+    color: string;
+  }) => {
+    const v = Number.isFinite(value) ? value : 0;
+    const pct = finalizados > 0 ? (v / finalizados) * 100 : 0;
+    return (
+      <div className="flex items-center gap-3">
+        <span className="flex w-32 shrink-0 items-center gap-1.5 text-xs font-medium text-foreground">
+          <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+          {label}
+        </span>
+        <div className="relative h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-foreground/5">
+          <div
+            className="absolute inset-y-0 left-0 rounded-full"
+            style={{ width: `${pct}%`, background: color }}
+          />
+        </div>
+        <span className="shrink-0 whitespace-nowrap text-right text-xs tabular-nums">
+          <span className="font-bold text-foreground">{v}</span>
+          <span className="text-muted-foreground">
+            {' '}
+            {v === 1 ? 'candidato' : 'candidatos'}
+          </span>
+        </span>
+      </div>
+    );
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <CardTitle>Candidatos por vacante</CardTitle>
+            <CardDescription>
+              Comparación de candidatos en proceso vs finalizados por vacante ·
+              Ordenado por total de candidatos (mayor a menor)
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <LegendDot color={PROC_COLOR} label="En proceso" />
+            <LegendDot color={FIN_COLOR} label="Finalizados" />
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {sorted.length === 0 ? (
+          <div className="flex h-32 flex-col items-center justify-center rounded-xl bg-muted/40 p-6 text-center">
+            <p className="text-sm font-medium text-muted-foreground">
+              Sin candidatos asignados a vacantes
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Stat cards */}
+            <div className="mb-4 grid grid-cols-3 gap-2">
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Total candidatos
+                </p>
+                <p className="mt-0.5 font-display text-2xl font-bold tabular-nums">
+                  {totalAll}
+                </p>
+                <p className="text-[10px] text-muted-foreground">En todas las vacantes</p>
+              </div>
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  En proceso
+                </p>
+                <p
+                  className="mt-0.5 font-display text-2xl font-bold tabular-nums"
+                  style={{ color: PROC_COLOR }}
+                >
+                  {totalProc}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Candidatos activos en proceso
+                </p>
+              </div>
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Finalizados
+                </p>
+                <p
+                  className="mt-0.5 font-display text-2xl font-bold tabular-nums"
+                  style={{ color: FIN_COLOR }}
+                >
+                  {totalFin}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Contratados, se cayó o no seleccionados
+                </p>
+              </div>
+            </div>
+
+            {/* Tabla: una columna con las dos barras apiladas + scroll vertical */}
+            <div className="max-h-[460px] overflow-y-auto rounded-xl border border-border scrollbar-thin">
+              <table className="w-full min-w-[640px] border-collapse text-sm">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-muted/60 text-left backdrop-blur">
+                    <th className="w-[34%] px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Vacante
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Cantidad de candidatos
+                    </th>
+                    <th className="w-16 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((row, i) => {
+                    const expanded = expandedId === row.vacancyId;
+                    return (
+                      <React.Fragment key={row.vacancyId}>
+                        <motion.tr
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: Math.min(i * 0.025, 0.3) }}
+                          className="border-t border-border transition-colors hover:bg-muted/30"
+                        >
+                          <td className="px-4 py-3 align-middle">
+                            <p
+                              className="truncate font-medium text-foreground"
+                              title={row.vacancyTitle}
+                            >
+                              {row.vacancyTitle}
+                            </p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="space-y-2">
+                              <BarLine
+                                label="En proceso"
+                                value={row.enProceso}
+                                color={PROC_COLOR}
+                              />
+                              <BarLine
+                                label="Finalizados"
+                                value={row.finalizados}
+                                color={FIN_COLOR}
+                                expanded={expanded}
+                                onClick={() =>
+                                  setExpandedId(expanded ? null : row.vacancyId)
+                                }
+                              />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right align-middle text-base font-bold tabular-nums text-foreground">
+                            {row.total}
+                          </td>
+                        </motion.tr>
+
+                        {/* Detalle expandible: desglose de finalizados por estado */}
+                        {expanded && (
+                          <tr className="border-t border-border bg-muted/20">
+                            <td colSpan={3} className="px-4 py-4">
+                              <div className="rounded-xl border border-border bg-card p-4">
+                                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                  Desglose de finalizados · {row.vacancyTitle}
+                                </p>
+                                <div className="space-y-2.5">
+                                  <BreakdownRow
+                                    label="Contratado"
+                                    value={row.contratado}
+                                    finalizados={row.finalizados}
+                                    color="#00A29B"
+                                  />
+                                  <BreakdownRow
+                                    label="Se cayó"
+                                    value={row.seCayo}
+                                    finalizados={row.finalizados}
+                                    color="#D14646"
+                                  />
+                                  <BreakdownRow
+                                    label="No seleccionado"
+                                    value={row.noSeleccionado}
+                                    finalizados={row.finalizados}
+                                    color="#987933"
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </>
         )}

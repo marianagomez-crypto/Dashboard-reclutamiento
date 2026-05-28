@@ -70,6 +70,21 @@ export async function POST(req: NextRequest) {
       type: 'success',
       href: '/dashboard/candidatos',
     });
+
+    // Movimiento inicial: registra la etapa con la que entra el candidato.
+    // Si falla, no rompe la creacion (el candidato ya existe).
+    try {
+      await repo.createStageMovement({
+        candidateId: c.id,
+        vacancyId: c.vacancyId || '',
+        stage: c.stage,
+        startedAt: (c.appliedAt || '').slice(0, 10) || new Date().toISOString().slice(0, 10),
+        comments: `Etapa inicial: ${c.stage}`,
+      });
+    } catch (mErr) {
+      console.error('[api/candidates POST] movimiento inicial fallo', mErr);
+    }
+
     return NextResponse.json({ data: c }, { status: 201 });
   } catch (err: any) {
     const msg = err?.message || 'No se pudo crear el candidato';

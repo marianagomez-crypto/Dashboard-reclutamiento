@@ -13,11 +13,13 @@ export default async function DashboardLayout({
   if (!session) redirect('/login');
 
   return (
-    <div className="relative flex min-h-screen">
+    <div className="relative flex min-h-screen overflow-x-hidden">
       <Sidebar role={session.role} />
-      <div className="flex flex-1 flex-col lg:pl-72">
+      {/* min-w-0 evita que los hijos flex empujen el contenedor mas alla
+          del viewport cuando tienen contenido ancho (tablas, charts, etc). */}
+      <div className="flex min-w-0 flex-1 flex-col lg:pl-72">
         <Topbar session={session} />
-        <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">
+        <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-6 lg:px-8 lg:py-8">
           <ShellTransition>{children}</ShellTransition>
         </main>
       </div>

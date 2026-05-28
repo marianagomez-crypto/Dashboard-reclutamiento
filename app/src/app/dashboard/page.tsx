@@ -10,7 +10,7 @@ import { getRepo } from '@/lib/data/repository';
 import { getSession } from '@/lib/auth/session';
 import { KpiCard } from '@/components/dashboard/kpi-card';
 import {
-  CandidatesPerVacancyChart,
+  CandidatesByStatusChart,
   DropReasonsChart,
   HeadReviewTimeChart,
   NotSelectedByStageChart,
@@ -18,7 +18,7 @@ import {
   StageBarChart,
   TrendChart,
   VacancyAgingChart,
-  type CandidatesPerVacancyRow,
+  type CandidatesByStatusRow,
   type HeadReviewRow,
   type VacancyAgingRow,
 } from '@/components/dashboard/charts';
@@ -171,27 +171,49 @@ async function fetchData() {
     count: v.count,
   }));
 
-  // ---- Candidatos "En proceso" por vacante (mostrando Puesto, no ID) ----
-  const vacanciesById = new Map(vacancies.map((v) => [v.id, v]));
-  const inProcessByVacancy: Record<string, number> = {};
-  candidates
-    .filter((c) => c.finalStatus === 'En proceso' && c.vacancyId)
-    .forEach((c) => {
-      const key = c.vacancyId as string;
-      inProcessByVacancy[key] = (inProcessByVacancy[key] || 0) + 1;
-    });
-  const candidatesPerVacancy: CandidatesPerVacancyRow[] = Object.entries(
-    inProcessByVacancy,
-  )
-    .map(([vacancyId, count]) => {
-      const v = vacanciesById.get(vacancyId);
-      return {
-        vacancyId,
-        title: v?.title || vacancyId,
-        count,
-      };
-    })
-    .filter((r) => r.count > 0);
+  // ---- Candidatos por vacante: En proceso vs Finalizados ----
+  // Vacancy-driven: lista TODAS las vacantes activas (no cerradas), cada una
+  // con su conteo de candidatos (aunque sea 0). Finalizados = Contratado /
+  // Se cayó / No seleccionado.
+  const activeVacancies = vacancies.filter((v) => v.status !== 'Cerrada');
+  type VacancyCount = {
+    enProceso: number;
+    contratado: number;
+    seCayo: number;
+    noSeleccionado: number;
+  };
+  const byVacancyStatus = new Map<string, VacancyCount>();
+  activeVacancies.forEach((v) =>
+    byVacancyStatus.set(v.id, {
+      enProceso: 0,
+      contratado: 0,
+      seCayo: 0,
+      noSeleccionado: 0,
+    }),
+  );
+  candidates.forEach((c) => {
+    if (!c.vacancyId) return;
+    const entry = byVacancyStatus.get(c.vacancyId);
+    if (!entry) return; // candidato de vacante cerrada o inexistente -> fuera
+    if (c.finalStatus === 'Contratado') entry.contratado += 1;
+    else if (c.finalStatus === 'Se cayó') entry.seCayo += 1;
+    else if (c.finalStatus === 'No seleccionado') entry.noSeleccionado += 1;
+    else entry.enProceso += 1; // 'En proceso' u otros
+  });
+  const candidatesByStatus: CandidatesByStatusRow[] = activeVacancies.map((v) => {
+    const e = byVacancyStatus.get(v.id)!;
+    const finalizados = e.contratado + e.seCayo + e.noSeleccionado;
+    return {
+      vacancyId: v.id,
+      vacancyTitle: v.title,
+      enProceso: e.enProceso,
+      finalizados,
+      total: e.enProceso + finalizados,
+      contratado: e.contratado,
+      seCayo: e.seCayo,
+      noSeleccionado: e.noSeleccionado,
+    };
+  });
 
   // ---- Antiguedad de vacantes abiertas (dias desde la apertura) ----
   const vacancyAging: VacancyAgingRow[] = vacancies
@@ -239,7 +261,7 @@ async function fetchData() {
     dropReasons,
     dropReasonsTotal,
     vacancyAging,
-    candidatesPerVacancy,
+    candidatesByStatus,
     headReview,
     source: repo.source(),
   };
@@ -367,7 +389,7 @@ export default async function DashboardPage() {
       </section>
 
       <section>
-        <CandidatesPerVacancyChart data={data.candidatesPerVacancy} />
+        <CandidatesByStatusChart data={data.candidatesByStatus} />
       </section>
 
       <section>

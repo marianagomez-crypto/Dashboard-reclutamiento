@@ -74,17 +74,34 @@ export interface Repository {
   ): Promise<StageMovement>;
   deleteStageMovement(id: string): Promise<void>;
 
-  // Sources catalogo
+  // Sources (canales de adquisicion por vacante) — editable
   listSources(): Promise<Source[]>;
+  createSource(data: Omit<Source, 'id'>): Promise<Source>;
+  updateSource(recordId: string, patch: Partial<Source>): Promise<Source>;
+  deleteSource(recordId: string): Promise<void>;
 
-  // Ingresos (onboarding)
+  // Ingresos (onboarding) — editable
   listIngresos(): Promise<Ingreso[]>;
+  createIngreso(data: Omit<Ingreso, 'id'>): Promise<Ingreso>;
+  updateIngreso(recordId: string, patch: Partial<Ingreso>): Promise<Ingreso>;
+  deleteIngreso(recordId: string): Promise<void>;
 
-  // Rango salarial por vacante
+  // Rango salarial por vacante — editable
   listSalaryRanges(): Promise<SalaryRange[]>;
+  createSalaryRange(
+    data: Omit<SalaryRange, 'id'>,
+  ): Promise<SalaryRange>;
+  updateSalaryRange(
+    recordId: string,
+    patch: Partial<SalaryRange>,
+  ): Promise<SalaryRange>;
+  deleteSalaryRange(recordId: string): Promise<void>;
 
-  // Tiempo de revisión por hiring manager / candidato
+  // Tiempo de revisión por hiring manager / candidato — editable
   listReviewTimes(): Promise<ReviewTime[]>;
+  createReviewTime(data: Omit<ReviewTime, 'id'>): Promise<ReviewTime>;
+  updateReviewTime(recordId: string, patch: Partial<ReviewTime>): Promise<ReviewTime>;
+  deleteReviewTime(recordId: string): Promise<void>;
 
   // Catalogos maestros (Seniorities, Hiring Managers, Reclutadores)
   listCatalog(type: CatalogType): Promise<CatalogItem[]>;

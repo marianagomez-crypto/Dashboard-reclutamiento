@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Search, Trash2 } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -25,14 +24,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  STAGES,
   STAGE_COLORS,
   type Candidate,
   type EtapaResultado,
@@ -41,8 +32,6 @@ import {
   type Vacancy,
 } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
-
-const RESULTS: EtapaResultado[] = ['Aprobado', 'Aceptó Oferta', 'No se presentó'];
 
 const RESULT_BADGE: Record<EtapaResultado, 'success' | 'destructive' | 'outline'> = {
   Aprobado: 'success',
@@ -74,8 +63,7 @@ export function MovementsTable({
   }, [initialMovements]);
 
   const [search, setSearch] = React.useState('');
-  const [creating, setCreating] = React.useState(false);
-  const [editing, setEditing] = React.useState<StageMovement | null>(null);
+  const [tab, setTab] = React.useState<'en-proceso' | 'finalizados'>('en-proceso');
   const [confirmDelete, setConfirmDelete] = React.useState<StageMovement | null>(null);
 
   const candidatesById = React.useMemo(
@@ -87,22 +75,51 @@ export function MovementsTable({
     [vacancies],
   );
 
+  // Un movimiento es "finalizado" si el candidato asociado ya tiene un estado
+  // final cerrado. Si no se encuentra el candidato, se trata como "en proceso".
+  const isFinished = React.useCallback(
+    (candidateId: string) => {
+      const c = candidatesById.get(candidateId);
+      if (!c) return false;
+      return (
+        c.finalStatus === 'Contratado' ||
+        c.finalStatus === 'Se cayó' ||
+        c.finalStatus === 'No seleccionado'
+      );
+    },
+    [candidatesById],
+  );
+
+  // Conteos por categoria (para los badges de los tabs)
+  const counts = React.useMemo(() => {
+    let enProceso = 0;
+    let finalizados = 0;
+    for (const m of movements) {
+      if (isFinished(m.candidateId)) finalizados += 1;
+      else enProceso += 1;
+    }
+    return { enProceso, finalizados };
+  }, [movements, isFinished]);
+
   const filtered = React.useMemo(() => {
     const q = search.toLowerCase().trim();
-    const list = !q
-      ? movements
-      : movements.filter((m) => {
-          const c = candidatesById.get(m.candidateId);
-          const v = vacanciesById.get(m.vacancyId);
-          const hay = `${m.id} ${m.candidateId} ${m.vacancyId} ${m.stage} ${
-            c?.name || ''
-          } ${v?.title || ''}`.toLowerCase();
-          return hay.includes(q);
-        });
-    return [...list].sort(
-      (a, b) => numericMovementId(a.id) - numericMovementId(b.id),
-    );
-  }, [movements, search, candidatesById, vacanciesById]);
+    return movements
+      .filter((m) => {
+        // Filtro por tab (estado del candidato)
+        const finished = isFinished(m.candidateId);
+        if (tab === 'en-proceso' && finished) return false;
+        if (tab === 'finalizados' && !finished) return false;
+        // Filtro por búsqueda
+        if (!q) return true;
+        const c = candidatesById.get(m.candidateId);
+        const v = vacanciesById.get(m.vacancyId);
+        const hay = `${m.id} ${m.candidateId} ${m.vacancyId} ${m.stage} ${
+          c?.name || ''
+        } ${v?.title || ''}`.toLowerCase();
+        return hay.includes(q);
+      })
+      .sort((a, b) => numericMovementId(a.id) - numericMovementId(b.id));
+  }, [movements, search, tab, isFinished, candidatesById, vacanciesById]);
 
   async function handleDelete() {
     if (!confirmDelete) return;
@@ -126,29 +143,68 @@ export function MovementsTable({
     <>
       <Card>
         <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0">
               <CardTitle>Movimientos de etapas</CardTitle>
               <CardDescription>
-                {movements.length} registros · historial completo de etapas por
-                candidato
+                {tab === 'en-proceso'
+                  ? 'Candidatos que siguen activos en el proceso de selección'
+                  : 'Candidatos cuyo proceso ya terminó (Contratado / Se cayó / No seleccionado)'}
               </CardDescription>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative w-full sm:w-64">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por candidato, vacante..."
-                  className="pl-9"
-                />
-              </div>
-              <Button variant="gradient" size="sm" onClick={() => setCreating(true)}>
-                <Plus className="h-4 w-4" />
-                Nuevo
-              </Button>
+            <div className="relative w-full lg:w-64">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por candidato, vacante..."
+                className="pl-9"
+              />
             </div>
+          </div>
+
+          {/* Tabs: En proceso / Finalizados */}
+          <div className="mt-4 inline-flex rounded-xl border border-border bg-muted/40 p-1">
+            <button
+              type="button"
+              onClick={() => setTab('en-proceso')}
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+                tab === 'en-proceso'
+                  ? 'bg-card text-foreground shadow-soft'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              En proceso
+              <span
+                className={`rounded-full px-1.5 text-xs tabular-nums ${
+                  tab === 'en-proceso'
+                    ? 'bg-brand-blue-100 text-brand-blue-700 dark:bg-brand-blue-600/30 dark:text-brand-blue-100'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {counts.enProceso}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('finalizados')}
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+                tab === 'finalizados'
+                  ? 'bg-card text-foreground shadow-soft'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Finalizados
+              <span
+                className={`rounded-full px-1.5 text-xs tabular-nums ${
+                  tab === 'finalizados'
+                    ? 'bg-brand-aqua-100 text-brand-aqua-700 dark:bg-brand-aqua-600/30 dark:text-brand-aqua-100'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {counts.finalizados}
+              </span>
+            </button>
           </div>
         </CardHeader>
 
@@ -274,15 +330,6 @@ export function MovementsTable({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7"
-                              onClick={() => setEditing(m)}
-                              aria-label="Editar"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
                               className="h-7 w-7 text-destructive hover:text-destructive"
                               onClick={() => setConfirmDelete(m)}
                               aria-label="Eliminar"
@@ -300,32 +347,6 @@ export function MovementsTable({
           )}
         </CardContent>
       </Card>
-
-      {/* Crear */}
-      <MovementFormDialog
-        open={creating}
-        onOpenChange={setCreating}
-        candidates={candidates}
-        vacancies={vacancies}
-        onSubmitted={(m) => {
-          setMovements((arr) => [m, ...arr]);
-          router.refresh();
-        }}
-      />
-
-      {/* Editar */}
-      <MovementFormDialog
-        open={!!editing}
-        onOpenChange={(v) => !v && setEditing(null)}
-        movement={editing || undefined}
-        candidates={candidates}
-        vacancies={vacancies}
-        onSubmitted={(m) => {
-          setMovements((arr) => arr.map((x) => (x.id === m.id ? m : x)));
-          setEditing(null);
-          router.refresh();
-        }}
-      />
 
       {/* Confirmar eliminar */}
       <Dialog
@@ -353,207 +374,5 @@ export function MovementsTable({
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-// ============================================================================
-// Modal de creación / edición
-// ============================================================================
-function MovementFormDialog({
-  open,
-  onOpenChange,
-  movement,
-  candidates,
-  vacancies,
-  onSubmitted,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  movement?: StageMovement;
-  candidates: Candidate[];
-  vacancies: Vacancy[];
-  onSubmitted: (m: StageMovement) => void;
-}) {
-  const isEdit = !!movement;
-  const [loading, setLoading] = React.useState(false);
-
-  // Estado controlado para que se reinicialice cuando cambia "movement"
-  const [candidateId, setCandidateId] = React.useState(movement?.candidateId || '');
-  const [vacancyId, setVacancyId] = React.useState(movement?.vacancyId || '');
-  const [stage, setStage] = React.useState<string>(movement?.stage || 'Screening');
-  const [startedAt, setStartedAt] = React.useState(
-    movement?.startedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10),
-  );
-  const [endedAt, setEndedAt] = React.useState(movement?.endedAt?.slice(0, 10) || '');
-  const [result, setResult] = React.useState<string>(movement?.result || 'none');
-  const [comments, setComments] = React.useState(movement?.comments || '');
-
-  React.useEffect(() => {
-    if (!open) return;
-    setCandidateId(movement?.candidateId || '');
-    setVacancyId(movement?.vacancyId || '');
-    setStage(movement?.stage || 'Screening');
-    setStartedAt(
-      movement?.startedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10),
-    );
-    setEndedAt(movement?.endedAt?.slice(0, 10) || '');
-    setResult(movement?.result || 'none');
-    setComments(movement?.comments || '');
-  }, [open, movement]);
-
-  // Auto-rellena vacancyId cuando se selecciona candidato (si tiene asociada)
-  React.useEffect(() => {
-    if (!candidateId || isEdit) return;
-    const c = candidates.find((x) => x.id === candidateId);
-    if (c?.vacancyId) setVacancyId(c.vacancyId);
-  }, [candidateId, candidates, isEdit]);
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    const payload = {
-      candidateId,
-      vacancyId,
-      stage,
-      startedAt,
-      endedAt: endedAt || null,
-      result: result === 'none' ? null : result,
-      comments: comments || null,
-    };
-    try {
-      const url = isEdit ? `/api/movements/${movement!.id}` : '/api/movements';
-      const res = await fetch(url, {
-        method: isEdit ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json().catch(() => ({ error: `Error ${res.status}` }));
-      if (!res.ok) throw new Error((json as any).error || 'Error');
-      onSubmitted((json as any).data);
-      toast.success(isEdit ? 'Movimiento actualizado' : 'Movimiento creado');
-      onOpenChange(false);
-    } catch (err: any) {
-      toast.error(err.message || 'No se pudo guardar');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? 'Editar movimiento' : 'Nuevo movimiento'}</DialogTitle>
-          <DialogDescription>
-            {isEdit
-              ? `Editando ${movement!.id}. Los cambios se sincronizan con Airtable.`
-              : 'Registra un nuevo movimiento de etapa en el historial.'}
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Candidato</Label>
-              <Select value={candidateId} onValueChange={setCandidateId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar candidato" />
-                </SelectTrigger>
-                <SelectContent>
-                  {candidates.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.id} · {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Vacante</Label>
-              <Select value={vacancyId} onValueChange={setVacancyId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar vacante" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vacancies.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.id} · {v.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Etapa</Label>
-              <Select value={stage} onValueChange={setStage}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STAGES.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Resultado</Label>
-              <Select value={result} onValueChange={setResult}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Sin resultado</SelectItem>
-                  {RESULTS.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Fecha inicio</Label>
-              <Input
-                type="date"
-                value={startedAt}
-                onChange={(e) => setStartedAt(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Fecha fin</Label>
-              <Input
-                type="date"
-                value={endedAt}
-                onChange={(e) => setEndedAt(e.target.value)}
-              />
-            </div>
-            <div className="col-span-2 space-y-1.5">
-              <Label>Comentarios</Label>
-              <Input
-                value={comments}
-                onChange={(e) => setComments(e.target.value)}
-                placeholder="Notas del movimiento (opcional)"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" variant="gradient" disabled={loading}>
-              {isEdit ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {isEdit ? 'Guardar' : 'Crear'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }

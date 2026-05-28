@@ -25,6 +25,9 @@ const patchSchema = z.object({
     .nullable()
     .optional(),
   hired: z.boolean().optional(),
+  // Fecha en la que se realizo la etapa (no se persiste en el candidato,
+  // se usa para el movimiento auto-generado en la tabla Etapas).
+  stageDate: z.string().optional(),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
@@ -48,17 +51,61 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       { status: 400 },
     );
   }
+  // stageDate es auxiliar — no es campo del candidato, lo separamos del patch.
+  const { stageDate, ...candidatePatch } = parsed.data;
+
   try {
     const repo = await getRepo();
-    const c = await repo.updateCandidate(params.id, parsed.data as any);
+    // Leemos la etapa anterior ANTES de actualizar, para detectar el cambio.
+    const before = await repo.getCandidate(params.id);
+    const c = await repo.updateCandidate(params.id, candidatePatch as any);
     await repo.logActivity({
       userId: session.sub,
       userName: session.name,
       action: 'actualizo un candidato',
       entity: 'candidato',
       entityId: c.id,
-      detail: parsed.data.stage ? `etapa -> ${parsed.data.stage}` : undefined,
+      detail: candidatePatch.stage ? `etapa -> ${candidatePatch.stage}` : undefined,
     });
+
+    // Auto-registrar movimiento en el pipeline si la etapa REALMENTE cambio.
+    // La fecha viene del calendario (stageDate); fallback a hoy. No rompe la
+    // respuesta si algo falla (la edicion del candidato ya tuvo efecto).
+    if (candidatePatch.stage && before && before.stage !== c.stage) {
+      const movDate = stageDate || new Date().toISOString().slice(0, 10);
+
+      // Si la nueva etapa es MAS AVANZADA, cerrar el movimiento abierto de la
+      // etapa anterior con Fecha Fin = fecha de inicio de la nueva etapa.
+      const newRank = STAGES.indexOf(c.stage);
+      const oldRank = STAGES.indexOf(before.stage);
+      if (newRank > oldRank) {
+        try {
+          const movs = await repo.listStageMovements(c.id);
+          const prevOpen = movs
+            .filter((m) => m.stage === before.stage && !m.endedAt)
+            .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1))[0];
+          if (prevOpen) {
+            await repo.updateStageMovement(prevOpen.id, { endedAt: movDate });
+          }
+        } catch (closeErr) {
+          console.error('[api/candidates PATCH] cierre de etapa anterior fallo', closeErr);
+        }
+      }
+
+      // Crear el movimiento de la nueva etapa con Fecha Inicio = movDate.
+      try {
+        await repo.createStageMovement({
+          candidateId: c.id,
+          vacancyId: c.vacancyId || '',
+          stage: c.stage,
+          startedAt: movDate,
+          comments: `Cambio de etapa: ${before.stage} → ${c.stage}`,
+        });
+      } catch (mErr) {
+        console.error('[api/candidates PATCH] movimiento auto fallo', mErr);
+      }
+    }
+
     return NextResponse.json({ data: c });
   } catch (err: any) {
     console.error('[api/candidates PATCH]', err);

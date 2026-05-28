@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   Users,
   Briefcase,
-  Calendar,
   BarChart3,
   ShieldCheck,
   History,
@@ -17,6 +16,9 @@ import {
   X,
   KanbanSquare,
   BookMarked,
+  DollarSign,
+  Megaphone,
+  Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/brand/logo';
@@ -34,7 +36,9 @@ const navItems: NavItem[] = [
   { href: '/dashboard/candidatos', label: 'Candidatos', icon: Users },
   { href: '/dashboard/pipeline', label: 'Pipeline', icon: KanbanSquare },
   { href: '/dashboard/vacantes', label: 'Vacantes', icon: Briefcase },
-  { href: '/dashboard/entrevistas', label: 'Bitácora', icon: Calendar },
+  { href: '/dashboard/rango-salarial', label: 'Rango salarial', icon: DollarSign },
+  { href: '/dashboard/fuentes', label: 'Fuentes', icon: Megaphone },
+  { href: '/dashboard/tiempo-revision', label: 'Tiempo de revisión', icon: Clock },
   { href: '/dashboard/reportes', label: 'Reportes', icon: BarChart3 },
   { href: '/dashboard/actividad', label: 'Actividad', icon: History },
   { href: '/dashboard/catalogos', label: 'Catálogos', icon: BookMarked },
