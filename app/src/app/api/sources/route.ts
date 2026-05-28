@@ -8,8 +8,8 @@ export const runtime = 'nodejs';
 const createSchema = z.object({
   vacancyId: z.string().trim().min(1, 'Vacante requerida'),
   name: z.string().trim().min(1, 'Fuente requerida'),
-  monthlyCost: z.number().nonnegative().optional(),
-  owner: z.string().optional(),
+  monthlyCost: z.number().nonnegative().nullable().optional(),
+  owner: z.string().nullable().optional(),
 });
 
 export async function GET() {

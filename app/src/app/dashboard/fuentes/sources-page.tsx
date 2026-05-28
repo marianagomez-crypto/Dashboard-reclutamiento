@@ -49,14 +49,14 @@ const KNOWN_CHANNELS = [
   'Universidad del Pacífico',
 ];
 
-// Color por canal (consistente con SourceChart del dashboard).
+// Color distintivo por canal (cada uno con identidad visual propia).
 const CHANNEL_COLOR: Record<string, string> = {
-  Linkedin: '#31359C',
-  Bumeran: '#00A29B',
-  Facebook: '#6873D7',
-  Referidos: '#36B7B3',
-  'Universidad de Lima': '#FDCA56',
-  'Universidad del Pacífico': '#98A9DF',
+  Linkedin: '#0A66C2',                   // azul LinkedIn oficial
+  Bumeran: '#F97316',                    // naranja
+  Facebook: '#1877F2',                   // azul Facebook oficial
+  Referidos: '#9333EA',                  // violeta
+  'Universidad de Lima': '#EAB308',      // amarillo ULima
+  'Universidad del Pacífico': '#1E3A8A', // azul UP oficial (oscuro)
 };
 
 function colorFor(name: string): string {
@@ -535,7 +535,7 @@ function SourceFormDialog({
               <Input
                 type="number"
                 min={0}
-                step="50"
+                step="any"
                 value={cost}
                 onChange={(e) => setCost(e.target.value)}
                 placeholder="0"

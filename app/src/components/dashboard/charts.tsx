@@ -646,12 +646,12 @@ export interface SourceCostRow {
 
 // Mismo color que usa SourcesPage para los chips de canal (consistencia visual).
 const CHANNEL_COLOR_PALETTE: Record<string, string> = {
-  Linkedin: '#31359C',
-  Bumeran: '#00A29B',
-  Facebook: '#6873D7',
-  Referidos: '#36B7B3',
-  'Universidad de Lima': '#FDCA56',
-  'Universidad del Pacífico': '#98A9DF',
+  Linkedin: '#0A66C2',                   // azul LinkedIn oficial
+  Bumeran: '#F97316',                    // naranja
+  Facebook: '#1877F2',                   // azul Facebook oficial
+  Referidos: '#9333EA',                  // violeta
+  'Universidad de Lima': '#EAB308',      // amarillo ULima
+  'Universidad del Pacífico': '#1E3A8A', // azul UP oficial (oscuro)
 };
 const FALLBACK_COLORS = ['#D14646', '#987933', '#4453A0', '#A9DAE6', '#D1A646'];
 
@@ -815,26 +815,8 @@ export function SourceCostByVacancyChart({
                         name={c}
                         stackId="cost"
                         fill={colorByChannel[c]}
-                        minPointSize={2}
                       />
                     ))}
-                    {/* Label con el total al final de cada barra */}
-                    <Bar
-                      dataKey="total"
-                      stackId="total-label"
-                      fill="transparent"
-                      isAnimationActive={false}
-                    >
-                      <LabelList
-                        dataKey="total"
-                        position="right"
-                        offset={8}
-                        fontSize={12}
-                        fontWeight={800}
-                        fill="hsl(var(--foreground))"
-                        formatter={(v: any) => formatPEN(Number(v))}
-                      />
-                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
