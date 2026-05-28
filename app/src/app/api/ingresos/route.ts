@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getRepo } from '@/lib/data/repository';
 import { getSession } from '@/lib/auth/session';
@@ -56,6 +57,8 @@ export async function POST(req: NextRequest) {
       entityId: item.id,
       detail: item.candidateId,
     });
+    // Invalida el SSR de la pagina para que el chart de comparacion se refresque
+    revalidatePath('/dashboard/rango-salarial');
     return NextResponse.json({ data: item }, { status: 201 });
   } catch (err: any) {
     console.error('[api/ingresos POST]', err);

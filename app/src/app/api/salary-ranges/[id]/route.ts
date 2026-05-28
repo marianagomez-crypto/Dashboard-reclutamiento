@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { getRepo } from '@/lib/data/repository';
 import { getSession } from '@/lib/auth/session';
@@ -51,6 +52,7 @@ export async function PATCH(
       entity: 'rango salarial',
       entityId: item.id,
     });
+    revalidatePath('/dashboard/rango-salarial');
     return NextResponse.json({ data: item });
   } catch (err: any) {
     console.error('[api/salary-ranges PATCH]', err);
@@ -80,6 +82,7 @@ export async function DELETE(
       entity: 'rango salarial',
       entityId: params.id,
     });
+    revalidatePath('/dashboard/rango-salarial');
     return NextResponse.json({ ok: true });
   } catch (err: any) {
     console.error('[api/salary-ranges DELETE]', err);

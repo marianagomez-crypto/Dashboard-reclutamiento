@@ -489,7 +489,7 @@ function SalaryRangeFormDialog({
               <Input
                 type="number"
                 min={0}
-                step="100"
+                step="any"
                 value={min}
                 onChange={(e) => setMin(e.target.value)}
                 placeholder="0"
@@ -500,7 +500,7 @@ function SalaryRangeFormDialog({
               <Input
                 type="number"
                 min={0}
-                step="100"
+                step="any"
                 value={max}
                 onChange={(e) => setMax(e.target.value)}
                 placeholder="0"

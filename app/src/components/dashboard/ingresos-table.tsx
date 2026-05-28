@@ -481,7 +481,7 @@ function IngresoFormDialog({
               <Input
                 type="number"
                 min={0}
-                step="100"
+                step="any"
                 value={salary}
                 onChange={(e) => setSalary(e.target.value)}
                 placeholder="0"
