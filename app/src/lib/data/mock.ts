@@ -15,6 +15,16 @@ import type {
   Vacancy,
 } from '@/lib/types';
 import { getStore } from './store';
+import {
+  isKvAvailable,
+  kvCreateUser,
+  kvDeleteUser,
+  kvGetUserByEmailFull,
+  kvGetUserById,
+  kvListUsers,
+  kvRecordLogin,
+  kvUpdateUser,
+} from './user-kv-store';
 import type {
   CandidateFilter,
   Repository,
@@ -40,11 +50,15 @@ export class MockRepository implements Repository {
   }
 
   // ---- Users ----
+  // Si Vercel KV esta disponible, usa el store persistente. Si no, cae al
+  // store en memoria (util para dev local sin KV configurado).
   async listUsers() {
+    if (isKvAvailable()) return kvListUsers();
     return getStore().users.map(publicUser);
   }
 
   async getUserByEmail(email: string) {
+    if (isKvAvailable()) return kvGetUserByEmailFull(email);
     return (
       getStore().users.find(
         (u) => u.email.toLowerCase() === email.toLowerCase(),
@@ -53,6 +67,7 @@ export class MockRepository implements Repository {
   }
 
   async getUserById(id: string) {
+    if (isKvAvailable()) return kvGetUserById(id);
     const u = getStore().users.find((x) => x.id === id);
     return u ? publicUser(u) : null;
   }
@@ -60,6 +75,7 @@ export class MockRepository implements Repository {
   async createUser(
     data: Omit<User, 'id' | 'createdAt'> & { password: string },
   ) {
+    if (isKvAvailable()) return kvCreateUser(data);
     const store = getStore();
     if (store.users.some((u) => u.email.toLowerCase() === data.email.toLowerCase())) {
       throw new Error('Ya existe un usuario con ese correo.');
@@ -82,6 +98,7 @@ export class MockRepository implements Repository {
     id: string,
     patch: Partial<User> & { password?: string },
   ) {
+    if (isKvAvailable()) return kvUpdateUser(id, patch);
     const store = getStore();
     const u = store.users.find((x) => x.id === id);
     if (!u) throw new Error('Usuario no encontrado');
@@ -95,11 +112,19 @@ export class MockRepository implements Repository {
   }
 
   async deleteUser(id: string) {
+    if (isKvAvailable()) {
+      await kvDeleteUser(id);
+      return;
+    }
     const store = getStore();
     store.users = store.users.filter((u) => u.id !== id);
   }
 
   async recordLogin(id: string) {
+    if (isKvAvailable()) {
+      await kvRecordLogin(id);
+      return;
+    }
     const u = getStore().users.find((x) => x.id === id);
     if (u) u.lastLoginAt = new Date().toISOString();
   }
