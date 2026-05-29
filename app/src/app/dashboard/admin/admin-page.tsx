@@ -4,6 +4,8 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
+  Eye,
+  EyeOff,
   Pencil,
   Plus,
   ShieldAlert,
@@ -48,6 +50,45 @@ const roleLabel: Record<Role, string> = {
   recruiter: 'Reclutador',
   viewer: 'Visualizador',
 };
+
+// Input de contraseña con toggle "mostrar/ocultar" (ojo a la derecha).
+function PasswordField({
+  id,
+  name,
+  required,
+  minLength = 8,
+  placeholder,
+}: {
+  id: string;
+  name: string;
+  required?: boolean;
+  minLength?: number;
+  placeholder?: string;
+}) {
+  const [show, setShow] = React.useState(false);
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        name={name}
+        type={show ? 'text' : 'password'}
+        required={required}
+        minLength={minLength}
+        placeholder={placeholder}
+        className="pr-10"
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition hover:text-foreground"
+        aria-label={show ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+        tabIndex={-1}
+      >
+        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+}
 
 export function AdminPage({ initialUsers }: { initialUsers: User[] }) {
   const router = useRouter();
@@ -288,7 +329,7 @@ export function AdminPage({ initialUsers }: { initialUsers: User[] }) {
               </div>
               <div className="col-span-2 space-y-1.5">
                 <Label htmlFor="password">Contrasena temporal</Label>
-                <Input id="password" name="password" type="password" required minLength={8} />
+                <PasswordField id="password" name="password" required />
               </div>
             </div>
             <DialogFooter>
@@ -342,7 +383,7 @@ export function AdminPage({ initialUsers }: { initialUsers: User[] }) {
                 </div>
                 <div className="col-span-2 space-y-1.5">
                   <Label htmlFor="e-password">Nueva contrasena (opcional)</Label>
-                  <Input id="e-password" name="password" type="password" minLength={8} />
+                  <PasswordField id="e-password" name="password" />
                 </div>
                 <div className="col-span-2 flex items-center gap-2">
                   <input
