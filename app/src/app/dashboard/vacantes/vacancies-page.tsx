@@ -54,6 +54,7 @@ import {
 } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
 import { VacancyAgingChart, type VacancyAgingRow } from '@/components/dashboard/charts';
+import { useCanMutate, useIsAdmin } from '@/components/auth/role-context';
 
 interface Props {
   initialVacancies: Vacancy[];
@@ -83,6 +84,8 @@ export function VacanciesPage({
   recruiters,
 }: Props) {
   const router = useRouter();
+  const canMutate = useCanMutate();
+  const isAdmin = useIsAdmin();
   const [vacancies, setVacancies] = React.useState(initialVacancies);
   // Resincroniza el estado local cuando el server vuelve a renderizar con data nueva
   // (ej. despues de "Sincronizar con Airtable" en el topbar).
@@ -227,10 +230,12 @@ export function VacanciesPage({
               ))}
             </SelectContent>
           </Select>
-          <Button variant="gradient" onClick={() => setCreating(true)}>
-            <Plus className="h-4 w-4" />
-            Nueva vacante
-          </Button>
+          {canMutate && (
+            <Button variant="gradient" onClick={() => setCreating(true)}>
+              <Plus className="h-4 w-4" />
+              Nueva vacante
+            </Button>
+          )}
         </div>
       </div>
 
@@ -266,18 +271,24 @@ export function VacanciesPage({
                           <Eye className="h-4 w-4" />
                           Ver detalles
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setEditing(v)}>
-                          <Pencil className="h-4 w-4" />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => setConfirmDelete(v)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Eliminar
-                        </DropdownMenuItem>
+                        {canMutate && (
+                          <DropdownMenuItem onClick={() => setEditing(v)}>
+                            <Pencil className="h-4 w-4" />
+                            Editar
+                          </DropdownMenuItem>
+                        )}
+                        {isAdmin && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => setConfirmDelete(v)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Eliminar
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>

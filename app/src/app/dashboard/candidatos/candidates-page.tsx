@@ -50,6 +50,7 @@ import {
 } from '@/lib/types';
 import { formatDate, initials, relativeTime } from '@/lib/utils';
 import { exportToExcel, exportToPdf } from '@/lib/export';
+import { useCanMutate, useIsAdmin } from '@/components/auth/role-context';
 
 interface Props {
   initialCandidates: Candidate[];
@@ -73,6 +74,8 @@ function numericId(id: string): number {
 
 export function CandidatesPage({ initialCandidates, vacancies, recruiters }: Props) {
   const router = useRouter();
+  const canMutate = useCanMutate();
+  const isAdmin = useIsAdmin();
   const searchParams = useSearchParams();
   const [candidates, setCandidates] = React.useState<Candidate[]>(initialCandidates);
   // Resincroniza el estado local cuando el server vuelve a renderizar con data nueva
@@ -265,10 +268,12 @@ export function CandidatesPage({ initialCandidates, vacancies, recruiters }: Pro
             <Download className="h-4 w-4" />
             PDF
           </Button>
-          <Button variant="gradient" size="sm" onClick={() => setCreating(true)}>
-            <Plus className="h-4 w-4" />
-            Nuevo candidato
-          </Button>
+          {canMutate && (
+            <Button variant="gradient" size="sm" onClick={() => setCreating(true)}>
+              <Plus className="h-4 w-4" />
+              Nuevo candidato
+            </Button>
+          )}
         </div>
       </div>
 
@@ -455,7 +460,11 @@ export function CandidatesPage({ initialCandidates, vacancies, recruiters }: Pro
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <Select value={c.stage} onValueChange={(v) => openStageChange(c, v)}>
+                        <Select
+                          value={c.stage}
+                          onValueChange={(v) => openStageChange(c, v)}
+                          disabled={!canMutate}
+                        >
                           <SelectTrigger className="h-8 w-[160px] text-xs">
                             <span
                               className="mr-1.5 h-2 w-2 rounded-full"
@@ -487,22 +496,29 @@ export function CandidatesPage({ initialCandidates, vacancies, recruiters }: Pro
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="inline-flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setEditing(c)}
-                            title="Editar"
-                          >
-                            <Pencil className="h-4 w-4 text-brand-blue-500" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setConfirmDelete(c)}
-                            title="Eliminar"
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          {canMutate && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setEditing(c)}
+                              title="Editar"
+                            >
+                              <Pencil className="h-4 w-4 text-brand-blue-500" />
+                            </Button>
+                          )}
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setConfirmDelete(c)}
+                              title="Eliminar"
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          )}
+                          {!canMutate && !isAdmin && (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </div>
                       </td>
                     </motion.tr>

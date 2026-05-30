@@ -32,6 +32,7 @@ import {
   type Vacancy,
 } from '@/lib/types';
 import { formatDate } from '@/lib/utils';
+import { useCanMutate } from '@/components/auth/role-context';
 
 const RESULT_BADGE: Record<EtapaResultado, 'success' | 'destructive' | 'outline'> = {
   Aprobado: 'success',
@@ -56,6 +57,7 @@ export function MovementsTable({
   vacancies,
 }: Props) {
   const router = useRouter();
+  const canMutate = useCanMutate();
   const [movements, setMovements] = React.useState(initialMovements);
   // Resincroniza el estado local cuando vuelve data fresca del server.
   React.useEffect(() => {
@@ -327,15 +329,19 @@ export function MovementsTable({
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-destructive hover:text-destructive"
-                              onClick={() => setConfirmDelete(m)}
-                              aria-label="Eliminar"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            {canMutate ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                onClick={() => setConfirmDelete(m)}
+                                aria-label="Eliminar"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                           </div>
                         </td>
                       </motion.tr>

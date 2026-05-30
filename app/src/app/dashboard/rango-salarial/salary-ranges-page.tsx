@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { SalaryRange, Vacancy } from '@/lib/types';
+import { useCanMutate, useIsAdmin } from '@/components/auth/role-context';
 
 interface Props {
   initialRanges: SalaryRange[];
@@ -54,6 +55,8 @@ function numericVacancyId(id: string): number {
 
 export function SalaryRangesPage({ initialRanges, vacancies }: Props) {
   const router = useRouter();
+  const canMutate = useCanMutate();
+  const isAdmin = useIsAdmin();
   const [ranges, setRanges] = React.useState(initialRanges);
   React.useEffect(() => {
     setRanges(initialRanges);
@@ -186,10 +189,12 @@ export function SalaryRangesPage({ initialRanges, vacancies }: Props) {
                     className="pl-9"
                   />
                 </div>
-                <Button variant="gradient" size="sm" onClick={() => setCreating(true)}>
-                  <Plus className="h-4 w-4" />
-                  Nuevo
-                </Button>
+                {canMutate && (
+                  <Button variant="gradient" size="sm" onClick={() => setCreating(true)}>
+                    <Plus className="h-4 w-4" />
+                    Nuevo
+                  </Button>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -260,24 +265,31 @@ export function SalaryRangesPage({ initialRanges, vacancies }: Props) {
                           </td>
                           <td className="px-3 py-2.5">
                             <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => setEditing(r)}
-                                aria-label="Editar"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-destructive hover:text-destructive"
-                                onClick={() => setConfirmDelete(r)}
-                                aria-label="Eliminar"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
+                              {canMutate && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => setEditing(r)}
+                                  aria-label="Editar"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              {isAdmin && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-destructive hover:text-destructive"
+                                  onClick={() => setConfirmDelete(r)}
+                                  aria-label="Eliminar"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              {!canMutate && !isAdmin && (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
                             </div>
                           </td>
                         </motion.tr>

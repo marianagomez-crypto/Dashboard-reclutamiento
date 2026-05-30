@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { CatalogItem, CatalogType } from '@/lib/types';
+import { useCanMutate, useIsAdmin } from '@/components/auth/role-context';
 
 interface Props {
   initialSeniorities: CatalogItem[];
@@ -86,6 +87,8 @@ function CatalogCard({
   initialItems: CatalogItem[];
 }) {
   const router = useRouter();
+  const canMutate = useCanMutate();
+  const isAdmin = useIsAdmin();
   const [items, setItems] = React.useState(initialItems);
   React.useEffect(() => {
     setItems(initialItems);
@@ -283,24 +286,31 @@ function CatalogCard({
                             </>
                           ) : (
                             <>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => startEdit(item)}
-                                aria-label="Editar"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-destructive hover:text-destructive"
-                                onClick={() => setConfirmDelete(item)}
-                                aria-label="Eliminar"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
+                              {canMutate && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => startEdit(item)}
+                                  aria-label="Editar"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              {isAdmin && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-destructive hover:text-destructive"
+                                  onClick={() => setConfirmDelete(item)}
+                                  aria-label="Eliminar"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              {!canMutate && !isAdmin && (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
                             </>
                           )}
                         </div>
@@ -313,23 +323,25 @@ function CatalogCard({
           </table>
         </div>
 
-        {/* Form de creación */}
-        <form onSubmit={handleCreate} className="mt-4 flex items-center gap-2">
-          <Input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder={`Agregar a ${title.toLowerCase()}…`}
-            disabled={creating}
-          />
-          <Button
-            type="submit"
-            variant="gradient"
-            disabled={creating || !newName.trim()}
-          >
-            <Plus className="h-4 w-4" />
-            Agregar
-          </Button>
-        </form>
+        {/* Form de creación — solo para usuarios con permiso de mutar */}
+        {canMutate && (
+          <form onSubmit={handleCreate} className="mt-4 flex items-center gap-2">
+            <Input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder={`Agregar a ${title.toLowerCase()}…`}
+              disabled={creating}
+            />
+            <Button
+              type="submit"
+              variant="gradient"
+              disabled={creating || !newName.trim()}
+            >
+              <Plus className="h-4 w-4" />
+              Agregar
+            </Button>
+          </form>
+        )}
       </CardContent>
 
       {/* Confirmar eliminar */}
