@@ -19,6 +19,15 @@ import {
   DollarSign,
   Megaphone,
   Clock,
+  CalendarHeart,
+  Package,
+  Boxes,
+  Layers,
+  HeartPulse,
+  Wallet,
+  Receipt,
+  Coins,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/brand/logo';
@@ -29,28 +38,74 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   roles?: Role[];
+  section?: string;
 }
 
 const navItems: NavItem[] = [
-  { href: '/dashboard', label: 'Resumen', icon: LayoutDashboard },
-  { href: '/dashboard/candidatos', label: 'Candidatos', icon: Users },
-  { href: '/dashboard/pipeline', label: 'Pipeline', icon: KanbanSquare },
-  { href: '/dashboard/vacantes', label: 'Vacantes', icon: Briefcase },
-  { href: '/dashboard/rango-salarial', label: 'Rango salarial', icon: DollarSign },
-  { href: '/dashboard/fuentes', label: 'Fuentes', icon: Megaphone },
-  { href: '/dashboard/tiempo-revision', label: 'Tiempo de revisión', icon: Clock },
-  { href: '/dashboard/reportes', label: 'Reportes', icon: BarChart3 },
-  { href: '/dashboard/actividad', label: 'Actividad', icon: History },
-  { href: '/dashboard/catalogos', label: 'Catálogos', icon: BookMarked },
-  { href: '/dashboard/admin', label: 'Admin', icon: ShieldCheck, roles: ['admin'] },
-  { href: '/dashboard/ajustes', label: 'Ajustes', icon: Settings },
+  // Reclutamiento
+  { href: '/dashboard', label: 'Resumen', icon: LayoutDashboard, section: 'Reclutamiento' },
+  { href: '/dashboard/candidatos', label: 'Candidatos', icon: Users, section: 'Reclutamiento' },
+  { href: '/dashboard/pipeline', label: 'Pipeline', icon: KanbanSquare, section: 'Reclutamiento' },
+  { href: '/dashboard/vacantes', label: 'Vacantes', icon: Briefcase, section: 'Reclutamiento' },
+  { href: '/dashboard/fuentes', label: 'Fuentes', icon: Megaphone, section: 'Reclutamiento' },
+  { href: '/dashboard/rango-salarial', label: 'Rango salarial', icon: DollarSign, section: 'Reclutamiento' },
+  { href: '/dashboard/tiempo-revision', label: 'Tiempo de revisión', icon: Clock, section: 'Reclutamiento' },
+  { href: '/dashboard/reportes', label: 'Reportes', icon: BarChart3, section: 'Reclutamiento' },
+
+  // Colaboradores
+  { href: '/dashboard/colaboradores', label: 'Datos', icon: Users, section: 'Colaboradores' },
+
+  // Engagement & Cultura
+  { href: '/dashboard/engagement', label: 'Eventos', icon: CalendarHeart, section: 'Engagement' },
+  { href: '/dashboard/engagement/gastos', label: 'Gastos por evento', icon: Coins, section: 'Engagement' },
+
+  // Merch
+  { href: '/dashboard/merch', label: 'Órdenes de compra', icon: Package, section: 'Merch' },
+  { href: '/dashboard/merch/usos', label: 'Usos', icon: Boxes, section: 'Merch' },
+  { href: '/dashboard/merch/stock', label: 'Stock', icon: Layers, section: 'Merch' },
+
+  // Bienestar & Salud
+  { href: '/dashboard/bienestar', label: 'Exámenes médicos', icon: HeartPulse, section: 'Bienestar & Salud' },
+
+  // Pagos
+  { href: '/dashboard/pagos', label: 'Pagos fijos', icon: Wallet, section: 'Pagos' },
+  { href: '/dashboard/pagos/rhe', label: 'RHE', icon: Receipt, section: 'Pagos' },
+
+  // Talento & Desarrollo (Próximamente)
+  // { href: '/dashboard/onboarding', label: 'Onboarding', icon: CheckCircle2, section: 'Talento & Desarrollo' },
+  // { href: '/dashboard/desarrollo', label: 'Desarrollo', icon: TrendingUp, section: 'Talento & Desarrollo' },
+  // { href: '/dashboard/evaluacion', label: 'Evaluación', icon: Star, section: 'Talento & Desarrollo' },
+  
+  // Administración
+  { href: '/dashboard/actividad', label: 'Actividad', icon: History, section: 'Administración' },
+  { href: '/dashboard/catalogos', label: 'Catálogos', icon: BookMarked, section: 'Administración' },
+  { href: '/dashboard/admin', label: 'Admin', icon: ShieldCheck, roles: ['admin'], section: 'Administración' },
+  { href: '/dashboard/ajustes', label: 'Ajustes', icon: Settings, section: 'Administración' },
 ];
 
 export function Sidebar({ role }: { role: Role }) {
   const pathname = usePathname();
+  // Match más específico: el href más largo que sea prefijo del pathname gana
+  // (evita que /dashboard/merch quede activo estando en /dashboard/merch/usos).
+  const activeHref = React.useMemo(() => {
+    const matches = navItems
+      .map((i) => i.href)
+      .filter((h) => pathname === h || pathname.startsWith(h + '/'));
+    return matches.sort((a, b) => b.length - a.length)[0];
+  }, [pathname]);
   const [open, setOpen] = React.useState(false);
+  const [expandedSections, setExpandedSections] = React.useState<Record<string, boolean>>({
+    'Reclutamiento': true, // Reclutamiento expandido por defecto
+  });
 
   const items = navItems.filter((it) => !it.roles || it.roles.includes(role));
+
+  const toggleSection = (section: string) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
+  };
 
   return (
     <>
@@ -78,57 +133,102 @@ export function Sidebar({ role }: { role: Role }) {
                   Baldecash
                 </span>
                 <span className="text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
-                  Recruitment
+                  Talento & Cultura
                 </span>
               </div>
             </Link>
           </div>
 
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5 scrollbar-thin">
-            {items.map((item, i) => {
-              const active =
-                pathname === item.href ||
-                (item.href !== '/dashboard' && pathname.startsWith(item.href));
-              const Icon = item.icon;
+            {Object.entries(
+              items.reduce(
+                (acc, item) => {
+                  const section = item.section || 'Otros';
+                  if (!acc[section]) acc[section] = [];
+                  acc[section].push(item);
+                  return acc;
+                },
+                {} as Record<string, typeof items>,
+              ),
+            ).map(([section, sectionItems], sectionIdx) => {
+              const isExpanded = expandedSections[section] ?? true;
+              
               return (
-                <motion.div
-                  key={item.href}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.04 }}
-                >
-                  <Link
-                    href={item.href}
-                    onClick={() => setOpen(false)}
-                    className={cn(
-                      'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
-                      active
-                        ? 'text-primary'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/60',
-                    )}
+                <div key={section}>
+                  {sectionIdx > 0 && <div className="my-3 border-t border-border" />}
+                  
+                  {/* Section Header (Accordion Toggle) */}
+                  <button
+                    onClick={() => toggleSection(section)}
+                    className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg hover:bg-muted/60 transition-colors"
                   >
-                    {active && (
-                      <motion.div
-                        layoutId="sidebar-active"
-                        className="absolute inset-0 rounded-lg bg-gradient-to-r from-brand-blue-100 to-brand-aqua-100 dark:from-brand-blue-600/20 dark:to-brand-aqua-600/20"
-                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
-                      />
-                    )}
-                    <Icon
-                      className={cn(
-                        'relative h-4 w-4 transition-transform group-hover:scale-110',
-                        active && 'text-primary',
-                      )}
-                    />
-                    <span className="relative">{item.label}</span>
-                    {active && (
-                      <motion.span
-                        layoutId="sidebar-dot"
-                        className="ml-auto h-1.5 w-1.5 rounded-full bg-primary shadow-glow"
-                      />
-                    )}
-                  </Link>
-                </motion.div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      {section}
+                    </p>
+                    <motion.div
+                      animate={{ rotate: isExpanded ? 0 : -90 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    </motion.div>
+                  </button>
+
+                  {/* Section Items (Expandable) */}
+                  <motion.div
+                    initial={false}
+                    animate={{ 
+                      height: isExpanded ? 'auto' : 0,
+                      opacity: isExpanded ? 1 : 0,
+                    }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    {sectionItems.map((item, i) => {
+                      const active = item.href === activeHref;
+                      const Icon = item.icon;
+                      return (
+                        <motion.div
+                          key={item.href}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.04 }}
+                        >
+                          <Link
+                            href={item.href}
+                            onClick={() => setOpen(false)}
+                            className={cn(
+                              'group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+                              active
+                                ? 'text-primary'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted/60',
+                            )}
+                          >
+                            {active && (
+                              <motion.div
+                                layoutId="sidebar-active"
+                                className="absolute inset-0 rounded-lg bg-gradient-to-r from-brand-blue-100 to-brand-aqua-100 dark:from-brand-blue-600/20 dark:to-brand-aqua-600/20"
+                                transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                              />
+                            )}
+                            <Icon
+                              className={cn(
+                                'relative h-4 w-4 transition-transform group-hover:scale-110',
+                                active && 'text-primary',
+                              )}
+                            />
+                            <span className="relative">{item.label}</span>
+                            {active && (
+                              <motion.span
+                                layoutId="sidebar-dot"
+                                className="ml-auto h-1.5 w-1.5 rounded-full bg-primary shadow-glow"
+                              />
+                            )}
+                          </Link>
+                        </motion.div>
+                      );
+                    })}
+                  </motion.div>
+                </div>
               );
             })}
           </nav>
@@ -136,10 +236,10 @@ export function Sidebar({ role }: { role: Role }) {
           <div className="border-t border-border p-4">
             <div className="rounded-xl border border-border bg-gradient-to-br from-brand-blue-100 to-brand-aqua-100 dark:from-brand-blue-600/15 dark:to-brand-aqua-600/15 p-4">
               <p className="text-xs font-semibold text-brand-blue-700 dark:text-brand-blue-100">
-                Pro Tip
+                🚀 Próximamente
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Conecta Airtable y los KPIs se sincronizaran en tiempo real.
+                Onboarding, Desarrollo, Evaluación, Planes de Carrera y más módulos de Talento.
               </p>
             </div>
           </div>

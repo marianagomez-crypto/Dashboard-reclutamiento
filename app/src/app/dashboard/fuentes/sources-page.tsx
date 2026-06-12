@@ -37,7 +37,15 @@ interface Props {
   initialSources: Source[];
   vacancies: Vacancy[];
   ownerOptions: string[];
+  aboveTable?: React.ReactNode;
+  belowTable?: React.ReactNode;
 }
+
+const VACANCY_STATUS_COLORS: Record<string, string> = {
+  Cerrada: '#D14646',
+  'En Pausa': '#CA8A04',
+  Abierta: '#00A29B',
+};
 
 // Catálogo conocido de canales (matchea con singleSelect en Airtable).
 // Si el usuario tipea algo nuevo, typecast lo crea como opción.
@@ -78,7 +86,13 @@ function numericSourceId(id?: string): number {
   return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER;
 }
 
-export function SourcesPage({ initialSources, vacancies, ownerOptions }: Props) {
+export function SourcesPage({
+  initialSources,
+  vacancies,
+  ownerOptions,
+  aboveTable,
+  belowTable,
+}: Props) {
   const router = useRouter();
   const canMutate = useCanMutate();
   const isAdmin = useIsAdmin();
@@ -89,6 +103,7 @@ export function SourcesPage({ initialSources, vacancies, ownerOptions }: Props) 
 
   const [search, setSearch] = React.useState('');
   const [channelFilter, setChannelFilter] = React.useState<string>('all');
+  const [tab, setTab] = React.useState<'abiertas' | 'cerradas'>('abiertas');
   const [creating, setCreating] = React.useState(false);
   const [editing, setEditing] = React.useState<Source | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState<Source | null>(null);
@@ -105,9 +120,20 @@ export function SourcesPage({ initialSources, vacancies, ownerOptions }: Props) 
     return Array.from(set).sort();
   }, [sources]);
 
-  const filtered = React.useMemo(() => {
+  // Una fuente es "cerrada/en pausa" si su vacante está Cerrada o En Pausa.
+  // El resto (Abierta o sin vacante conocida) cae en "abiertas".
+  const isClosedOrPaused = React.useCallback(
+    (s: Source) => {
+      const st = vacanciesById.get(s.vacancyId || '')?.status;
+      return st === 'Cerrada' || st === 'En Pausa';
+    },
+    [vacanciesById],
+  );
+
+  // Base: aplica búsqueda + filtro de canal (sin el tab).
+  const base = React.useMemo(() => {
     const q = search.toLowerCase().trim();
-    const list = sources.filter((s) => {
+    return sources.filter((s) => {
       if (channelFilter !== 'all' && s.name !== channelFilter) return false;
       if (!q) return true;
       const v = vacanciesById.get(s.vacancyId || '');
@@ -116,10 +142,27 @@ export function SourcesPage({ initialSources, vacancies, ownerOptions }: Props) 
       } ${s.owner || ''}`.toLowerCase();
       return hay.includes(q);
     });
+  }, [sources, search, channelFilter, vacanciesById]);
+
+  // Conteos por tab (respetan búsqueda + canal pero NO el tab activo).
+  const tabCounts = React.useMemo(() => {
+    let abiertas = 0;
+    let cerradas = 0;
+    for (const s of base) {
+      if (isClosedOrPaused(s)) cerradas += 1;
+      else abiertas += 1;
+    }
+    return { abiertas, cerradas };
+  }, [base, isClosedOrPaused]);
+
+  const filtered = React.useMemo(() => {
+    const list = base.filter((s) =>
+      tab === 'cerradas' ? isClosedOrPaused(s) : !isClosedOrPaused(s),
+    );
     return [...list].sort(
       (a, b) => numericSourceId(a.sourceId) - numericSourceId(b.sourceId),
     );
-  }, [sources, search, channelFilter, vacanciesById]);
+  }, [base, tab, isClosedOrPaused]);
 
   async function handleDelete() {
     if (!confirmDelete) return;
@@ -139,13 +182,8 @@ export function SourcesPage({ initialSources, vacancies, ownerOptions }: Props) 
     }
   }
 
-  // Stats: total, costo mensual total, canal más usado
+  // Stats: total y costo mensual total
   const totalCost = sources.reduce((acc, s) => acc + (s.monthlyCost || 0), 0);
-  const channelCounts: Record<string, number> = {};
-  sources.forEach((s) => {
-    if (s.name) channelCounts[s.name] = (channelCounts[s.name] || 0) + 1;
-  });
-  const topChannel = Object.entries(channelCounts).sort((a, b) => b[1] - a[1])[0];
 
   return (
     <>
@@ -159,7 +197,7 @@ export function SourcesPage({ initialSources, vacancies, ownerOptions }: Props) 
 
         {/* Stats */}
         {sources.length > 0 && (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:max-w-md">
             <div className="rounded-xl border border-border bg-card p-4 shadow-card">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Fuentes registradas
@@ -176,24 +214,56 @@ export function SourcesPage({ initialSources, vacancies, ownerOptions }: Props) 
                 {formatMoney(totalCost)}
               </p>
             </div>
-            {topChannel && (
-              <div className="col-span-2 rounded-xl border border-border bg-card p-4 shadow-card sm:col-span-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Canal más usado
-                </p>
-                <p
-                  className="mt-0.5 font-display text-2xl font-bold"
-                  style={{ color: colorFor(topChannel[0]) }}
-                >
-                  {topChannel[0]}
-                </p>
-                <p className="text-[10px] text-muted-foreground tabular-nums">
-                  {topChannel[1]} {topChannel[1] === 1 ? 'vacante' : 'vacantes'}
-                </p>
-              </div>
-            )}
           </div>
         )}
+
+        {aboveTable}
+
+        {belowTable}
+
+        {/* Tabs: Vacantes abiertas / Cerradas o en pausa (justo encima de la tabla) */}
+        <div className="inline-flex rounded-xl border border-border bg-muted/40 p-1">
+          <button
+            type="button"
+            onClick={() => setTab('abiertas')}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+              tab === 'abiertas'
+                ? 'bg-card text-foreground shadow-soft'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Vacantes abiertas
+            <span
+              className={`rounded-full px-1.5 text-xs tabular-nums ${
+                tab === 'abiertas'
+                  ? 'bg-brand-blue-100 text-brand-blue-700 dark:bg-brand-blue-600/30 dark:text-brand-blue-100'
+                  : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {tabCounts.abiertas}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('cerradas')}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-semibold transition ${
+              tab === 'cerradas'
+                ? 'bg-card text-foreground shadow-soft'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Cerradas o en pausa
+            <span
+              className={`rounded-full px-1.5 text-xs tabular-nums ${
+                tab === 'cerradas'
+                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-600/30 dark:text-amber-100'
+                  : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {tabCounts.cerradas}
+            </span>
+          </button>
+        </div>
 
         <Card>
           <CardHeader>
@@ -268,6 +338,11 @@ export function SourcesPage({ initialSources, vacancies, ownerOptions }: Props) 
                       <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Vacante
                       </th>
+                      {tab === 'cerradas' && (
+                        <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          Estado
+                        </th>
+                      )}
                       <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Canal
                       </th>
@@ -305,6 +380,27 @@ export function SourcesPage({ initialSources, vacancies, ownerOptions }: Props) 
                               {s.vacancyId}
                             </p>
                           </td>
+                          {tab === 'cerradas' && (
+                            <td className="px-3 py-2.5">
+                              {v?.status ? (
+                                <span
+                                  className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                                  style={{
+                                    background: `${VACANCY_STATUS_COLORS[v.status] || '#6873D7'}1A`,
+                                    color: VACANCY_STATUS_COLORS[v.status] || '#6873D7',
+                                  }}
+                                >
+                                  <span
+                                    className="h-1.5 w-1.5 rounded-full"
+                                    style={{ background: VACANCY_STATUS_COLORS[v.status] || '#6873D7' }}
+                                  />
+                                  {v.status}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </td>
+                          )}
                           <td className="px-3 py-2.5">
                             <span
                               className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"

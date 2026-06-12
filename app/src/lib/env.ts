@@ -46,7 +46,7 @@ export const env = {
     password: process.env.ADMIN_PASSWORD || 'Baldecash2026!',
   },
   app: {
-    name: process.env.NEXT_PUBLIC_APP_NAME || 'Baldecash Recruitment',
+    name: process.env.NEXT_PUBLIC_APP_NAME || 'Baldecash Talento & Cultura',
     url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
   },
 };

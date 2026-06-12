@@ -48,3 +48,6 @@ Thumbs.db
 *.tgz
 *.bak
 *.orig
+
+# Dump local de datos de runtime (KV/memoria) — no es código fuente
+**/local-data-snapshot.json

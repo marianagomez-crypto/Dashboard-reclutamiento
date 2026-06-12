@@ -16,11 +16,11 @@ const display = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: {
-    default: 'Baldecash Recruitment',
+    default: 'Baldecash Talento & Cultura',
     template: '%s · Baldecash',
   },
   description:
-    'Plataforma Baldecash de gestion y visualizacion de reportes de reclutamiento.',
+    'Plataforma integrada de Talento & Cultura: reclutamiento, onboarding, desarrollo, evaluación y engagement.',
   icons: {
     icon: '/favicon.svg',
   },

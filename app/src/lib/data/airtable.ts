@@ -6,11 +6,21 @@
 
 import Airtable, { type FieldSet } from 'airtable';
 import { env } from '@/lib/env';
+import { PAYMENT_MONTHS } from '@/lib/types';
 import type {
   ActivityLog,
   Candidate,
   CatalogItem,
   CatalogType,
+  EngagementEvent,
+  EngagementExpense,
+  EngagementParticipant,
+  FixedPayment,
+  RheEntry,
+  MedicalExam,
+  MerchExtraExpense,
+  MerchUsage,
+  PurchaseOrder,
   EtapaResultado,
   FinalStatus,
   Fuente,
@@ -58,6 +68,29 @@ const CATALOG_TABLES: Record<
   },
 };
 import { MockRepository } from './mock';
+
+// Tablas de Engagement y Merch creadas vía Metadata API (fuente de verdad).
+const ENGAGEMENT_TABLES = {
+  areas: 'tblUiFvvq0qOcyK7r',
+  events: 'tbldSZKz185oQnQLM',
+  participants: 'tbl0Dajc7XNSr73Nb',
+  expenses: 'tblhDLnl7wAq3zCEo',
+  gastoEventos: 'tbll09qOICsGOUxIk',
+};
+const MERCH_TABLES = {
+  orders: 'tblIqM8tp5ibN8AJv',
+  usages: 'tblN3gW1GfgYtyM3E',
+  expenses: 'tblEfxWHje0xMJYI7',
+};
+const PAGOS_TABLE = 'tblX3EuRiGsY72tSS';
+const RHE_TABLE = 'tblzGSgMmOXBUEdA1';
+const BIENESTAR_EXAMS_TABLE = 'tbl8TGQOE2JAR0c28';
+const PARTICIPATION_CHOICES = [
+  'Participo',
+  'No Participo',
+  'No Aplica',
+  'Aun No Participa',
+];
 
 // ============================================================================
 // Mapeo de campos (nombre dominio -> nombre Airtable)
@@ -919,6 +952,732 @@ export class AirtableRepository implements Repository {
   updateUser(i: string, p: any) { return this.local.updateUser(i, p); }
   deleteUser(i: string) { return this.local.deleteUser(i); }
   recordLogin(i: string) { return this.local.recordLogin(i); }
+
+  // ============================================================
+  // Engagement & Cultura (Airtable: Áreas / Eventos / Colaboradores)
+  // ============================================================
+
+  // ---- Áreas ----
+  async listEngagementAreas(): Promise<CatalogItem[]> {
+    const records = await this.selectAll(ENGAGEMENT_TABLES.areas);
+    return records
+      .map((r) => ({
+        id: r.id,
+        recordId: r.id,
+        name: str(r.fields, 'Área') || '',
+      }))
+      .filter((a) => a.name);
+  }
+
+  async createEngagementArea(name: string): Promise<CatalogItem> {
+    const r = (await this.base(ENGAGEMENT_TABLES.areas).create(
+      { 'Área': name } as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return { id: r.id, recordId: r.id, name: str(r.fields, 'Área') || name };
+  }
+
+  async updateEngagementArea(id: string, name: string): Promise<CatalogItem> {
+    const r = (await this.base(ENGAGEMENT_TABLES.areas).update(
+      id,
+      { 'Área': name } as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return { id: r.id, recordId: r.id, name: str(r.fields, 'Área') || name };
+  }
+
+  async deleteEngagementArea(id: string): Promise<void> {
+    await this.base(ENGAGEMENT_TABLES.areas).destroy(id);
+  }
+
+  // ---- Eventos ----
+  private eventFromRecord(r: Airtable.Record<FieldSet>): EngagementEvent {
+    return {
+      id: r.id,
+      name: str(r.fields, 'Evento') || '',
+      date: str(r.fields, 'Fecha'),
+    };
+  }
+
+  async listEngagementEvents(): Promise<EngagementEvent[]> {
+    const records = await this.selectAll(ENGAGEMENT_TABLES.events);
+    return records.map((r) => this.eventFromRecord(r)).filter((e) => e.name);
+  }
+
+  async createEngagementEvent(
+    d: Omit<EngagementEvent, 'id'>,
+  ): Promise<EngagementEvent> {
+    const r = (await this.base(ENGAGEMENT_TABLES.events).create(
+      { Evento: d.name, Fecha: d.date || undefined } as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    // "Una columna por evento": crea el campo singleSelect en Colaboradores.
+    await this.ensureParticipationField(d.name);
+    return this.eventFromRecord(r);
+  }
+
+  async updateEngagementEvent(
+    id: string,
+    p: Partial<Omit<EngagementEvent, 'id'>>,
+  ): Promise<EngagementEvent> {
+    // Si cambia el nombre, renombra también la columna en Colaboradores.
+    let prevName: string | undefined;
+    if (p.name !== undefined) {
+      const cur = await this.base(ENGAGEMENT_TABLES.events).find(id);
+      prevName = str((cur as any).fields, 'Evento');
+    }
+    const fields: Record<string, any> = {};
+    if (p.name !== undefined) fields['Evento'] = p.name;
+    if (p.date !== undefined) fields['Fecha'] = p.date || null;
+    const r = (await this.base(ENGAGEMENT_TABLES.events).update(id, fields, {
+      typecast: true,
+    })) as unknown as Airtable.Record<FieldSet>;
+    if (p.name !== undefined && prevName && prevName !== p.name) {
+      await this.renameParticipationField(prevName, p.name);
+    }
+    return this.eventFromRecord(r);
+  }
+
+  async deleteEngagementEvent(id: string): Promise<void> {
+    // Nota: Airtable no permite borrar campos vía API, así que la columna del
+    // evento en Colaboradores queda huérfana (la app solo muestra eventos que
+    // existan en la tabla Eventos, por lo que se ignora).
+    await this.base(ENGAGEMENT_TABLES.events).destroy(id);
+  }
+
+  // ---- Colaboradores (con una columna por evento) ----
+  private async eventNameMap(): Promise<{ idToName: Map<string, string>; names: string[] }> {
+    const events = await this.listEngagementEvents();
+    const idToName = new Map(events.map((e) => [e.id, e.name]));
+    return { idToName, names: events.map((e) => e.name) };
+  }
+
+  async listEngagementParticipants(): Promise<EngagementParticipant[]> {
+    const [records, { idToName }] = await Promise.all([
+      this.selectAll(ENGAGEMENT_TABLES.participants),
+      this.eventNameMap(),
+    ]);
+    return records
+      .map((r) => this.participantFromRecord(r, idToName))
+      .filter((p) => p.name);
+  }
+
+  private async participationFields(
+    participation: Record<string, string> | undefined,
+    idToName: Map<string, string>,
+  ): Promise<Record<string, any>> {
+    const fields: Record<string, any> = {};
+    if (!participation) return fields;
+    for (const [eid, status] of Object.entries(participation)) {
+      const col = idToName.get(eid);
+      if (col) fields[col] = status;
+    }
+    return fields;
+  }
+
+  async createEngagementParticipant(
+    d: Omit<EngagementParticipant, 'id'>,
+  ): Promise<EngagementParticipant> {
+    const { idToName } = await this.eventNameMap();
+    const fields: Record<string, any> = {
+      Nombre: d.name,
+      Status: d.status,
+    };
+    if (d.area) fields['Área'] = d.area;
+    if (d.hireDate) fields['Fecha Ingreso'] = d.hireDate;
+    if (d.birthDate) fields['Fecha Nacimiento'] = d.birthDate;
+    if (d.dni) fields['DNI'] = d.dni;
+    if (d.position) fields['Cargo'] = d.position;
+    Object.assign(fields, await this.participationFields(d.participation, idToName));
+    const r = (await this.base(ENGAGEMENT_TABLES.participants).create(fields as any, {
+      typecast: true,
+    })) as unknown as Airtable.Record<FieldSet>;
+    return this.participantFromRecord(r, idToName);
+  }
+
+  async updateEngagementParticipant(
+    id: string,
+    p: Partial<Omit<EngagementParticipant, 'id'>>,
+  ): Promise<EngagementParticipant> {
+    const { idToName } = await this.eventNameMap();
+    const fields: Record<string, any> = {};
+    if (p.name !== undefined) fields['Nombre'] = p.name;
+    if (p.status !== undefined) fields['Status'] = p.status;
+    if (p.area !== undefined) fields['Área'] = p.area || null;
+    if (p.hireDate !== undefined) fields['Fecha Ingreso'] = p.hireDate || null;
+    if (p.birthDate !== undefined) fields['Fecha Nacimiento'] = p.birthDate || null;
+    if (p.dni !== undefined) fields['DNI'] = p.dni || null;
+    if (p.position !== undefined) fields['Cargo'] = p.position || null;
+    Object.assign(fields, await this.participationFields(p.participation as any, idToName));
+    const r = (await this.base(ENGAGEMENT_TABLES.participants).update(id, fields, {
+      typecast: true,
+    })) as unknown as Airtable.Record<FieldSet>;
+    return this.participantFromRecord(r, idToName);
+  }
+
+  async deleteEngagementParticipant(id: string): Promise<void> {
+    await this.base(ENGAGEMENT_TABLES.participants).destroy(id);
+  }
+
+  // ---- Engagement: gastos por evento ----
+  private engExpenseFromRecord(r: Airtable.Record<FieldSet>): EngagementExpense {
+    const f = r.fields;
+    const monthLabel = str(f, 'Mes');
+    const month =
+      PAYMENT_MONTHS.find((m) => m.label === monthLabel)?.key || monthLabel || '';
+    return {
+      id: r.id,
+      eventId: str(f, 'ID Evento') || '',
+      eventName: str(f, 'Evento'),
+      month,
+      name: str(f, 'Nombre de Gasto') || '',
+      amount: num(f, 'Monto'),
+    };
+  }
+
+  private engExpenseFieldsForWrite(d: Partial<EngagementExpense>): Record<string, any> {
+    const f: Record<string, any> = {};
+    if (d.name !== undefined) f['Nombre de Gasto'] = d.name;
+    if (d.eventId !== undefined) f['ID Evento'] = d.eventId ?? null;
+    if (d.eventName !== undefined) f['Evento'] = d.eventName ?? null;
+    if (d.month !== undefined) {
+      const label = PAYMENT_MONTHS.find((m) => m.key === d.month)?.label || d.month;
+      f['Mes'] = label || null;
+    }
+    if (d.amount !== undefined) f['Monto'] = d.amount ?? null;
+    return f;
+  }
+
+  async listEngagementExpenses(): Promise<EngagementExpense[]> {
+    const records = await this.selectAll(ENGAGEMENT_TABLES.expenses);
+    return records.map((r) => this.engExpenseFromRecord(r));
+  }
+
+  async createEngagementExpense(
+    d: Omit<EngagementExpense, 'id'>,
+  ): Promise<EngagementExpense> {
+    const r = (await this.base(ENGAGEMENT_TABLES.expenses).create(
+      this.engExpenseFieldsForWrite(d) as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.engExpenseFromRecord(r);
+  }
+
+  async updateEngagementExpense(
+    id: string,
+    p: Partial<Omit<EngagementExpense, 'id'>>,
+  ): Promise<EngagementExpense> {
+    const r = (await this.base(ENGAGEMENT_TABLES.expenses).update(
+      id,
+      this.engExpenseFieldsForWrite(p) as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.engExpenseFromRecord(r);
+  }
+
+  async deleteEngagementExpense(id: string): Promise<void> {
+    await this.base(ENGAGEMENT_TABLES.expenses).destroy(id);
+  }
+
+  // ---- Engagement: eventos propios de gastos (catálogo) ----
+  async listEngagementGastoEventos(): Promise<CatalogItem[]> {
+    const records = await this.selectAll(ENGAGEMENT_TABLES.gastoEventos);
+    return records
+      .map((r) => ({ id: r.id, recordId: r.id, name: str(r.fields, 'Nombre') || '' }))
+      .filter((e) => e.name);
+  }
+  async createEngagementGastoEvento(name: string): Promise<CatalogItem> {
+    const r = (await this.base(ENGAGEMENT_TABLES.gastoEventos).create(
+      { Nombre: name } as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return { id: r.id, recordId: r.id, name: str(r.fields, 'Nombre') || name };
+  }
+  async deleteEngagementGastoEvento(id: string): Promise<void> {
+    await this.base(ENGAGEMENT_TABLES.gastoEventos).destroy(id);
+  }
+
+  private participantFromRecord(
+    r: Airtable.Record<FieldSet>,
+    idToName: Map<string, string>,
+  ): EngagementParticipant {
+    const participation: Record<string, any> = {};
+    for (const [eid, col] of idToName) {
+      const v = str(r.fields, col);
+      if (v) participation[eid] = v;
+    }
+    return {
+      id: r.id,
+      name: str(r.fields, 'Nombre') || '',
+      status: (str(r.fields, 'Status') as any) || 'Activo',
+      area: str(r.fields, 'Área'),
+      hireDate: str(r.fields, 'Fecha Ingreso'),
+      birthDate: str(r.fields, 'Fecha Nacimiento'),
+      dni: str(r.fields, 'DNI'),
+      position: str(r.fields, 'Cargo'),
+      participation,
+    };
+  }
+
+  // Metadata API: crea / renombra columnas singleSelect de participación.
+  private async ensureParticipationField(eventName: string): Promise<void> {
+    try {
+      const url = `https://api.airtable.com/v0/meta/bases/${env.airtable.baseId}/tables/${ENGAGEMENT_TABLES.participants}/fields`;
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.airtable.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: eventName,
+          type: 'singleSelect',
+          options: {
+            choices: PARTICIPATION_CHOICES.map((name) => ({ name })),
+          },
+        }),
+      });
+    } catch (e) {
+      console.error('[airtable] no se pudo crear la columna de evento', e);
+    }
+  }
+
+  private async renameParticipationField(
+    oldName: string,
+    newName: string,
+  ): Promise<void> {
+    try {
+      const metaUrl = `https://api.airtable.com/v0/meta/bases/${env.airtable.baseId}/tables`;
+      const res = await fetch(metaUrl, {
+        headers: { Authorization: `Bearer ${env.airtable.token}` },
+      });
+      const json = (await res.json()) as any;
+      const table = json.tables?.find(
+        (t: any) => t.id === ENGAGEMENT_TABLES.participants,
+      );
+      const field = table?.fields?.find((f: any) => f.name === oldName);
+      if (!field) return;
+      await fetch(
+        `${metaUrl}/${ENGAGEMENT_TABLES.participants}/fields/${field.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${env.airtable.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: newName }),
+        },
+      );
+    } catch (e) {
+      console.error('[airtable] no se pudo renombrar la columna de evento', e);
+    }
+  }
+
+  // ============================================================
+  // MERCH (Airtable: Órdenes de compra / Usos)
+  // ============================================================
+  private orderFromRecord(r: Airtable.Record<FieldSet>): PurchaseOrder {
+    const f = r.fields;
+    return {
+      id: r.id,
+      orderId: str(f, 'ID Compra') || '',
+      purchaseDate: str(f, 'Fecha de Compra'),
+      productType: str(f, 'Tipo de producto') || 'Merch',
+      article: str(f, 'Artículo') || '',
+      unitPrice: num(f, 'Precio unit'),
+      qtyOrdered: num(f, 'Cantidad Comprada'),
+      totalPrice: num(f, 'Precio Total'),
+      qtyArrived: num(f, 'Cantidad Llegada'),
+      endDate: str(f, 'Fecha de Termino'),
+      supplier: str(f, 'Proveedor'),
+      contact: str(f, 'Contacto'),
+      comments: str(f, 'Comentarios'),
+    };
+  }
+
+  async listPurchaseOrders(): Promise<PurchaseOrder[]> {
+    const records = await this.selectAll(MERCH_TABLES.orders);
+    return records
+      .map((r) => this.orderFromRecord(r))
+      .filter((o) => o.orderId || o.article)
+      .sort((a, b) => a.orderId.localeCompare(b.orderId));
+  }
+
+  private async nextOrderId(): Promise<string> {
+    const records = await this.selectAll(MERCH_TABLES.orders);
+    let maxN = 0;
+    for (const r of records) {
+      const m = String(r.fields['ID Compra'] || '').match(/^C-(\d{1,})$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxN) maxN = n;
+      }
+    }
+    return `C-${String(maxN + 1).padStart(3, '0')}`;
+  }
+
+  private orderFieldsForWrite(d: Partial<PurchaseOrder>): Record<string, any> {
+    const f: Record<string, any> = {};
+    if (d.orderId !== undefined) f['ID Compra'] = d.orderId;
+    if (d.purchaseDate !== undefined) f['Fecha de Compra'] = d.purchaseDate || null;
+    if (d.productType !== undefined) f['Tipo de producto'] = d.productType;
+    if (d.article !== undefined) f['Artículo'] = d.article;
+    if (d.unitPrice !== undefined) f['Precio unit'] = d.unitPrice ?? null;
+    if (d.qtyOrdered !== undefined) f['Cantidad Comprada'] = d.qtyOrdered ?? null;
+    if (d.totalPrice !== undefined) f['Precio Total'] = d.totalPrice ?? null;
+    if (d.qtyArrived !== undefined) f['Cantidad Llegada'] = d.qtyArrived ?? null;
+    if (d.endDate !== undefined) f['Fecha de Termino'] = d.endDate || null;
+    if (d.supplier !== undefined) f['Proveedor'] = d.supplier ?? null;
+    if (d.contact !== undefined) f['Contacto'] = d.contact ?? null;
+    if (d.comments !== undefined) f['Comentarios'] = d.comments ?? null;
+    return f;
+  }
+
+  async createPurchaseOrder(
+    d: Omit<PurchaseOrder, 'id'>,
+  ): Promise<PurchaseOrder> {
+    const orderId = d.orderId || (await this.nextOrderId());
+    const r = (await this.base(MERCH_TABLES.orders).create(
+      this.orderFieldsForWrite({ ...d, orderId }) as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.orderFromRecord(r);
+  }
+
+  async updatePurchaseOrder(
+    id: string,
+    p: Partial<Omit<PurchaseOrder, 'id'>>,
+  ): Promise<PurchaseOrder> {
+    const r = (await this.base(MERCH_TABLES.orders).update(
+      id,
+      this.orderFieldsForWrite(p) as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.orderFromRecord(r);
+  }
+
+  async deletePurchaseOrder(id: string): Promise<void> {
+    await this.base(MERCH_TABLES.orders).destroy(id);
+  }
+
+  private usageFromRecord(r: Airtable.Record<FieldSet>): MerchUsage {
+    const f = r.fields;
+    return {
+      id: r.id,
+      orderId: str(f, 'ID Compra Usado') || '',
+      usageDate: str(f, 'Fecha'),
+      quantity: num(f, 'Cantidad'),
+      unitPrice: num(f, 'Precio Unit'),
+      totalAmount: num(f, 'Monto total'),
+      occasion: str(f, 'Ocasion'),
+      comments: str(f, 'Evento Especifico'),
+    };
+  }
+
+  async listMerchUsages(): Promise<MerchUsage[]> {
+    const records = await this.selectAll(MERCH_TABLES.usages);
+    return records.map((r) => this.usageFromRecord(r)).filter((u) => u.orderId);
+  }
+
+  private usageFieldsForWrite(d: Partial<MerchUsage>): Record<string, any> {
+    const f: Record<string, any> = {};
+    if (d.orderId !== undefined) f['ID Compra Usado'] = d.orderId;
+    if (d.usageDate !== undefined) f['Fecha'] = d.usageDate || null;
+    if (d.quantity !== undefined) f['Cantidad'] = d.quantity ?? null;
+    if (d.unitPrice !== undefined) f['Precio Unit'] = d.unitPrice ?? null;
+    if (d.totalAmount !== undefined) f['Monto total'] = d.totalAmount ?? null;
+    if (d.occasion !== undefined) f['Ocasion'] = d.occasion ?? null;
+    if (d.comments !== undefined) f['Evento Especifico'] = d.comments ?? null;
+    return f;
+  }
+
+  async createMerchUsage(d: Omit<MerchUsage, 'id'>): Promise<MerchUsage> {
+    const r = (await this.base(MERCH_TABLES.usages).create(
+      this.usageFieldsForWrite(d) as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.usageFromRecord(r);
+  }
+
+  async updateMerchUsage(
+    id: string,
+    p: Partial<Omit<MerchUsage, 'id'>>,
+  ): Promise<MerchUsage> {
+    const r = (await this.base(MERCH_TABLES.usages).update(
+      id,
+      this.usageFieldsForWrite(p) as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.usageFromRecord(r);
+  }
+
+  async deleteMerchUsage(id: string): Promise<void> {
+    await this.base(MERCH_TABLES.usages).destroy(id);
+  }
+
+  // ---- MERCH: gastos extra (no consumen stock) ----
+  private expenseFromRecord(r: Airtable.Record<FieldSet>): MerchExtraExpense {
+    const f = r.fields;
+    return {
+      id: r.id,
+      name: str(f, 'Nombre de Gasto'),
+      expenseType: str(f, 'Tipo de Gasto'),
+      date: str(f, 'Fecha'),
+      occasion: str(f, 'Ocasion'),
+      event: str(f, 'Evento Especifico'),
+      amount: num(f, 'Monto'),
+    };
+  }
+
+  private expenseFieldsForWrite(d: Partial<MerchExtraExpense>): Record<string, any> {
+    const f: Record<string, any> = {};
+    if (d.name !== undefined) f['Nombre de Gasto'] = d.name ?? null;
+    if (d.expenseType !== undefined) f['Tipo de Gasto'] = d.expenseType ?? null;
+    if (d.date !== undefined) f['Fecha'] = d.date || null;
+    if (d.occasion !== undefined) f['Ocasion'] = d.occasion ?? null;
+    if (d.event !== undefined) f['Evento Especifico'] = d.event ?? null;
+    if (d.amount !== undefined) f['Monto'] = d.amount ?? null;
+    return f;
+  }
+
+  async listMerchExtraExpenses(): Promise<MerchExtraExpense[]> {
+    const records = await this.selectAll(MERCH_TABLES.expenses);
+    return records.map((r) => this.expenseFromRecord(r));
+  }
+
+  async createMerchExtraExpense(
+    d: Omit<MerchExtraExpense, 'id'>,
+  ): Promise<MerchExtraExpense> {
+    const r = (await this.base(MERCH_TABLES.expenses).create(
+      this.expenseFieldsForWrite(d) as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.expenseFromRecord(r);
+  }
+
+  async updateMerchExtraExpense(
+    id: string,
+    p: Partial<Omit<MerchExtraExpense, 'id'>>,
+  ): Promise<MerchExtraExpense> {
+    const r = (await this.base(MERCH_TABLES.expenses).update(
+      id,
+      this.expenseFieldsForWrite(p) as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.expenseFromRecord(r);
+  }
+
+  async deleteMerchExtraExpense(id: string): Promise<void> {
+    await this.base(MERCH_TABLES.expenses).destroy(id);
+  }
+
+  // ---- Pagos fijos mensuales ----
+  private paymentFromRecord(r: Airtable.Record<FieldSet>): FixedPayment {
+    const f = r.fields;
+    const status: Record<string, any> = {};
+    for (const m of PAYMENT_MONTHS) {
+      const v = str(f, m.label);
+      if (v) status[m.key] = v;
+    }
+    let scheduledAt: Record<string, string> | undefined;
+    const rawSched = str(f, 'Programado Fechas');
+    if (rawSched) {
+      try {
+        scheduledAt = JSON.parse(rawSched);
+      } catch {
+        scheduledAt = undefined;
+      }
+    }
+    return {
+      id: r.id,
+      name: str(f, 'Nombre de Pago') || '',
+      provider: str(f, 'Proveedor'),
+      partida: str(f, 'Partida'),
+      sender: str(f, 'Quien Manda'),
+      paymentDate: str(f, 'Fecha de Pago'),
+      status,
+      scheduledAt,
+    };
+  }
+
+  private paymentFieldsForWrite(d: Partial<FixedPayment>): Record<string, any> {
+    const f: Record<string, any> = {};
+    if (d.name !== undefined) f['Nombre de Pago'] = d.name;
+    if (d.provider !== undefined) f['Proveedor'] = d.provider ?? null;
+    if (d.partida !== undefined) f['Partida'] = d.partida ?? null;
+    if (d.sender !== undefined) f['Quien Manda'] = d.sender ?? null;
+    if (d.paymentDate !== undefined) f['Fecha de Pago'] = d.paymentDate ?? null;
+    if (d.status) {
+      const byKey = new Map(PAYMENT_MONTHS.map((m) => [m.key, m.label]));
+      for (const [key, val] of Object.entries(d.status)) {
+        const label = byKey.get(key as any);
+        if (label) f[label] = val ?? null;
+      }
+    }
+    if (d.scheduledAt !== undefined) {
+      f['Programado Fechas'] = d.scheduledAt
+        ? JSON.stringify(d.scheduledAt)
+        : null;
+    }
+    return f;
+  }
+
+  async listFixedPayments(): Promise<FixedPayment[]> {
+    const records = await this.selectAll(PAGOS_TABLE);
+    return records.map((r) => this.paymentFromRecord(r)).filter((p) => p.name);
+  }
+
+  async createFixedPayment(d: Omit<FixedPayment, 'id'>): Promise<FixedPayment> {
+    const r = (await this.base(PAGOS_TABLE).create(
+      this.paymentFieldsForWrite(d) as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.paymentFromRecord(r);
+  }
+
+  async updateFixedPayment(
+    id: string,
+    p: Partial<Omit<FixedPayment, 'id'>>,
+  ): Promise<FixedPayment> {
+    const r = (await this.base(PAGOS_TABLE).update(
+      id,
+      this.paymentFieldsForWrite(p) as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.paymentFromRecord(r);
+  }
+
+  async deleteFixedPayment(id: string): Promise<void> {
+    await this.base(PAGOS_TABLE).destroy(id);
+  }
+
+  // ---- RHE (recibos por honorarios) ----
+  private rheFromRecord(r: Airtable.Record<FieldSet>): RheEntry {
+    const f = r.fields;
+    const status: Record<string, any> = {};
+    for (const m of PAYMENT_MONTHS) {
+      const v = str(f, m.label);
+      if (v) status[m.key] = v;
+    }
+    return {
+      id: r.id,
+      person: str(f, 'Persona') || '',
+      personStatus: str(f, 'Status'),
+      contact: str(f, 'Contacto'),
+      area: str(f, 'Areas'),
+      partida: str(f, 'Partida'),
+      entity: str(f, 'Entidad'),
+      paymentDate: str(f, 'Fecha de Pago'),
+      status,
+    };
+  }
+
+  private rheFieldsForWrite(d: Partial<RheEntry>): Record<string, any> {
+    const f: Record<string, any> = {};
+    if (d.person !== undefined) f['Persona'] = d.person;
+    if (d.personStatus !== undefined) f['Status'] = d.personStatus ?? null;
+    if (d.contact !== undefined) f['Contacto'] = d.contact ?? null;
+    if (d.area !== undefined) f['Areas'] = d.area ?? null;
+    if (d.partida !== undefined) f['Partida'] = d.partida ?? null;
+    if (d.entity !== undefined) f['Entidad'] = d.entity ?? null;
+    if (d.paymentDate !== undefined) f['Fecha de Pago'] = d.paymentDate ?? null;
+    if (d.status) {
+      const byKey = new Map(PAYMENT_MONTHS.map((m) => [m.key, m.label]));
+      for (const [key, val] of Object.entries(d.status)) {
+        const label = byKey.get(key as any);
+        if (label) f[label] = val ?? null;
+      }
+    }
+    return f;
+  }
+
+  async listRheEntries(): Promise<RheEntry[]> {
+    const records = await this.selectAll(RHE_TABLE);
+    return records.map((r) => this.rheFromRecord(r)).filter((e) => e.person);
+  }
+
+  async createRheEntry(d: Omit<RheEntry, 'id'>): Promise<RheEntry> {
+    const r = (await this.base(RHE_TABLE).create(this.rheFieldsForWrite(d) as any, {
+      typecast: true,
+    })) as unknown as Airtable.Record<FieldSet>;
+    return this.rheFromRecord(r);
+  }
+
+  async updateRheEntry(
+    id: string,
+    p: Partial<Omit<RheEntry, 'id'>>,
+  ): Promise<RheEntry> {
+    const r = (await this.base(RHE_TABLE).update(id, this.rheFieldsForWrite(p) as any, {
+      typecast: true,
+    })) as unknown as Airtable.Record<FieldSet>;
+    return this.rheFromRecord(r);
+  }
+
+  async deleteRheEntry(id: string): Promise<void> {
+    await this.base(RHE_TABLE).destroy(id);
+  }
+
+  // Tipo de producto: catálogo fuera de Airtable — delega a local.
+  listMerchProductTypes() { return this.local.listMerchProductTypes(); }
+  createMerchProductType(name: string) { return this.local.createMerchProductType(name); }
+  updateMerchProductType(id: string, name: string) { return this.local.updateMerchProductType(id, name); }
+  deleteMerchProductType(id: string) { return this.local.deleteMerchProductType(id); }
+
+  // ============================================================
+  // Bienestar & Salud (Airtable: Examenes Medicos)
+  // ============================================================
+  private examFromRecord(r: Airtable.Record<FieldSet>): MedicalExam {
+    const f = r.fields;
+    return {
+      id: r.id,
+      collaboratorId: str(f, 'ID Colaborador') || '',
+      collaboratorName: str(f, 'Colaborador') || '',
+      examDate: str(f, 'Fecha de Examen'),
+      sede: str(f, 'Sede'),
+      status: str(f, 'Status'),
+      resultado: str(f, 'Resultado'),
+    };
+  }
+
+  private examFieldsForWrite(d: Partial<MedicalExam>): Record<string, any> {
+    const f: Record<string, any> = {};
+    if (d.collaboratorId !== undefined) f['ID Colaborador'] = d.collaboratorId;
+    if (d.collaboratorName !== undefined) f['Colaborador'] = d.collaboratorName;
+    if (d.examDate !== undefined) f['Fecha de Examen'] = d.examDate || null;
+    if (d.sede !== undefined) f['Sede'] = d.sede || null;
+    if (d.status !== undefined) f['Status'] = d.status || null;
+    if (d.resultado !== undefined) f['Resultado'] = d.resultado || null;
+    return f;
+  }
+
+  async listMedicalExams(): Promise<MedicalExam[]> {
+    const records = await this.selectAll(BIENESTAR_EXAMS_TABLE);
+    return records.map((r) => this.examFromRecord(r)).filter((e) => e.collaboratorName);
+  }
+
+  async createMedicalExam(d: Omit<MedicalExam, 'id'>): Promise<MedicalExam> {
+    const r = (await this.base(BIENESTAR_EXAMS_TABLE).create(
+      this.examFieldsForWrite(d) as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.examFromRecord(r);
+  }
+
+  async updateMedicalExam(
+    id: string,
+    p: Partial<Omit<MedicalExam, 'id'>>,
+  ): Promise<MedicalExam> {
+    const r = (await this.base(BIENESTAR_EXAMS_TABLE).update(
+      id,
+      this.examFieldsForWrite(p) as any,
+      { typecast: true },
+    )) as unknown as Airtable.Record<FieldSet>;
+    return this.examFromRecord(r);
+  }
+
+  async deleteMedicalExam(id: string): Promise<void> {
+    await this.base(BIENESTAR_EXAMS_TABLE).destroy(id);
+  }
 
   listActivity(limit?: number) { return this.local.listActivity(limit); }
   logActivity(entry: Omit<ActivityLog, 'id' | 'createdAt'>) { return this.local.logActivity(entry); }

@@ -665,9 +665,15 @@ function channelColor(name: string, fallbackIndex: number): string {
 export function SourceCostByVacancyChart({
   data,
   channels,
+  title = 'Costo de fuentes por vacante',
+  description = 'Inversión mensual en canales de adquisición · stacked por canal',
+  emptyText = 'Sin fuentes pagas registradas',
 }: {
   data: SourceCostRow[];
   channels: string[];
+  title?: string;
+  description?: string;
+  emptyText?: string;
 }) {
   // Solo mostrar vacantes con costo > 0
   const filtered = data.filter((d) => d.total > 0);
@@ -687,16 +693,14 @@ export function SourceCostByVacancyChart({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Costo de fuentes por vacante</CardTitle>
-        <CardDescription>
-          Inversión mensual en canales de adquisición · stacked por canal
-        </CardDescription>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>
         {sorted.length === 0 ? (
           <div className="flex h-32 flex-col items-center justify-center rounded-xl bg-muted/40 p-6 text-center">
             <p className="text-sm font-medium text-muted-foreground">
-              Sin fuentes pagas registradas
+              {emptyText}
             </p>
             <p className="mt-1 text-xs text-muted-foreground/70">
               Cuando alguna fuente tenga costo mensual mayor que cero aparecerá aquí.

@@ -60,7 +60,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
               Baldecash
             </span>
             <span className="text-[10px] font-medium uppercase tracking-[0.3em] text-white/75">
-              Recruitment
+              Talento & Cultura
             </span>
           </div>
         </motion.div>
@@ -72,13 +72,13 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
           className="relative max-w-xl"
         >
           <h1 className="font-display text-5xl font-bold leading-[1.05] tracking-tight text-white drop-shadow-[0_2px_24px_rgba(0,0,0,0.25)] xl:text-6xl">
-            Lleva tu reclutamiento <br />
+            Gestiona tu talento <br />
             <span className="bg-gradient-to-r from-brand-gold-300 via-brand-aqua-300 to-white bg-clip-text text-transparent">
-              al siguiente nivel.
+              de forma integral.
             </span>
           </h1>
           <p className="mt-5 max-w-md text-base leading-relaxed text-white/80">
-            Tu pipeline de talento, sincronizado con Airtable en tiempo real.
+            Reclutamiento, onboarding, desarrollo, evaluación y engagement de talento en un solo lugar.
           </p>
         </motion.div>
 

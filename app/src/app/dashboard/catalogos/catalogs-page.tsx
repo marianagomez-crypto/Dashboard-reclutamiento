@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
-import { Award, Check, Pencil, Plus, Trash2, UserCheck, Users2, X } from 'lucide-react';
+import { Award, Building2, Check, Package, Pencil, Plus, Trash2, UserCheck, Users2, X } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -29,12 +29,16 @@ interface Props {
   initialSeniorities: CatalogItem[];
   initialHiringManagers: CatalogItem[];
   initialRecruiters: CatalogItem[];
+  initialAreas: CatalogItem[];
+  initialProductTypes: CatalogItem[];
 }
 
 export function CatalogsPage({
   initialSeniorities,
   initialHiringManagers,
   initialRecruiters,
+  initialAreas,
+  initialProductTypes,
 }: Props) {
   return (
     <div className="space-y-6">
@@ -66,6 +70,22 @@ export function CatalogsPage({
         icon={<Users2 className="h-5 w-5" />}
         initialItems={initialRecruiters}
       />
+      <CatalogCard
+        type="areas"
+        endpoint="/api/engagement/areas"
+        title="Áreas"
+        description="Áreas de la empresa para la matriz de eventos de Engagement"
+        icon={<Building2 className="h-5 w-5" />}
+        initialItems={initialAreas}
+      />
+      <CatalogCard
+        type="product-types"
+        endpoint="/api/merch/product-types"
+        title="Tipo de producto"
+        description="Tipos para las órdenes de compra de Merch (Merch, Snacks, …)"
+        icon={<Package className="h-5 w-5" />}
+        initialItems={initialProductTypes}
+      />
     </div>
   );
 }
@@ -75,17 +95,22 @@ export function CatalogsPage({
 // ============================================================================
 function CatalogCard({
   type,
+  endpoint,
   title,
   description,
   icon,
   initialItems,
 }: {
-  type: CatalogType;
+  type: CatalogType | string;
+  // Base de la API. Por defecto los catálogos van a Airtable vía /api/catalogs/:type;
+  // los que viven fuera de Airtable (ej. áreas de engagement) pasan su propio endpoint.
+  endpoint?: string;
   title: string;
   description: string;
   icon: React.ReactNode;
   initialItems: CatalogItem[];
 }) {
+  const apiBase = endpoint || `/api/catalogs/${type}`;
   const router = useRouter();
   const canMutate = useCanMutate();
   const isAdmin = useIsAdmin();
@@ -107,7 +132,7 @@ function CatalogCard({
     if (!name) return;
     setCreating(true);
     try {
-      const res = await fetch(`/api/catalogs/${type}`, {
+      const res = await fetch(apiBase, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -145,7 +170,7 @@ function CatalogCard({
     const prev = items;
     setItems((arr) => arr.map((x) => (x.id === item.id ? { ...x, name } : x)));
     try {
-      const res = await fetch(`/api/catalogs/${type}/${item.id}`, {
+      const res = await fetch(`${apiBase}/${item.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -170,7 +195,7 @@ function CatalogCard({
     const prev = items;
     setItems((arr) => arr.filter((x) => x.id !== id));
     try {
-      const res = await fetch(`/api/catalogs/${type}/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${apiBase}/${id}`, { method: 'DELETE' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((json as any).error || 'Error');
       toast.success('Elemento eliminado');

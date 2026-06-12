@@ -229,6 +229,209 @@ export interface Ingreso {
   leaderComment?: string;   // Comentario Líder
 }
 
+// =============================================================================
+// Engagement & Cultura
+// =============================================================================
+
+// Estado laboral del colaborador en la matriz de eventos.
+export type EmployeeStatus = 'Activo' | 'Cese';
+export const EMPLOYEE_STATUSES: EmployeeStatus[] = ['Activo', 'Cese'];
+
+export const EMPLOYEE_STATUS_COLORS: Record<EmployeeStatus, string> = {
+  Activo: '#00A29B',
+  Cese: '#D14646',
+};
+
+// Estado de participación de un colaborador en un evento puntual.
+export type ParticipationStatus =
+  | 'Participo'
+  | 'No Participo'
+  | 'No Aplica'
+  | 'Aun No Participa';
+
+export const PARTICIPATION_STATUSES: ParticipationStatus[] = [
+  'Participo',
+  'No Participo',
+  'No Aplica',
+  'Aun No Participa',
+];
+
+export const PARTICIPATION_COLORS: Record<ParticipationStatus, string> = {
+  Participo: '#00A29B',        // verde — asistió / participó
+  'No Participo': '#D14646',   // rojo — no participó
+  'No Aplica': '#94A3B8',      // gris — no aplica
+  'Aun No Participa': '#FDCA56',// ámbar — pendiente
+};
+
+// Áreas para la matriz de engagement (lista propia, editable por celda).
+export const ENGAGEMENT_AREAS = [
+  'Cobranzas',
+  'Contabilidad y controller',
+  'Convenciones y alianzas',
+  'Growth',
+  'Legal',
+  'Talento & Cultura',
+  'Tecnologia y finanzas',
+  'Ventas',
+  'Operaciones',
+] as const;
+
+export type EngagementArea = (typeof ENGAGEMENT_AREAS)[number];
+
+// Evento de cultura (columna de la matriz).
+export interface EngagementEvent {
+  id: string;        // EV0001, EV0002, ...
+  name: string;      // "Desayuno con Ruben", "Dia de la Mujer", ...
+  date?: string;     // Fecha del evento (opcional)
+}
+
+// Colaborador con su estado y participación por evento (fila de la matriz).
+export interface EngagementParticipant {
+  id: string;        // EP0001, EP0002, ...
+  name: string;      // Nombres Completos
+  status: EmployeeStatus;
+  area?: string;     // Área (catálogo ENGAGEMENT_AREAS)
+  hireDate?: string; // Fecha Ingreso (ISO)
+  birthDate?: string;// Fecha Nacimiento (ISO)
+  dni?: string;      // DNI
+  position?: string; // Cargo
+  // Participación indexada por id de evento.
+  participation: Record<string, ParticipationStatus>;
+}
+
+// =============================================================================
+// MERCH — Órdenes de compra (merch / snacks)
+// =============================================================================
+
+export const PRODUCT_TYPES = ['Merch', 'Snacks'] as const;
+export type ProductType = (typeof PRODUCT_TYPES)[number];
+
+export const PRODUCT_TYPE_COLORS: Record<string, string> = {
+  Merch: '#0E7A6B',   // verde brand
+  Snacks: '#6D28D9',  // violeta
+};
+
+export interface PurchaseOrder {
+  id: string;            // record id interno
+  orderId: string;       // ID COMPRA (C-001, ...)
+  purchaseDate?: string; // Fecha de Compra (ISO)
+  productType: string;   // Tipo de producto (Merch | Snacks)
+  article: string;       // Artículo
+  photoUrl?: string;     // Foto (URL opcional)
+  unitPrice?: number;    // Precio unit
+  qtyOrdered?: number;   // Cantidad Comprada
+  totalPrice?: number;   // Precio Total
+  qtyArrived?: number;   // Cantidad Llegada
+  qtyRemaining?: number; // Cantidad Restante
+  endDate?: string;      // Fecha de Termino (ISO)
+  supplier?: string;     // Proveedor
+  contact?: string;      // Contacto
+  comments?: string;     // Comentarios
+}
+
+// Ocasiones de uso del merch (catálogo fijo, editable por celda/form).
+export const MERCH_OCCASIONS = [
+  'Focus Group',
+  'Regalo',
+  'Prestamos a Comercial',
+] as const;
+export type MerchOccasion = (typeof MERCH_OCCASIONS)[number];
+
+export const MERCH_OCCASION_COLORS: Record<string, string> = {
+  'Focus Group': '#0E7A6B',          // verde
+  Regalo: '#CA8A04',                 // ámbar
+  'Prestamos a Comercial': '#D14646',// rojo
+};
+
+// Uso/consumo de un artículo, referenciando la orden de compra de origen.
+export interface MerchUsage {
+  id: string;            // record id interno
+  usageDate?: string;    // Fecha (ISO)
+  orderId: string;       // ID COMPRA USADO -> PurchaseOrder.orderId
+  quantity?: number;     // Cantidad
+  unitPrice?: number;    // Precio Unit (snapshot de la orden)
+  totalAmount?: number;  // Monto total (cantidad × precio unit)
+  occasion?: string;     // Ocasión
+  comments?: string;     // Comentarios
+}
+
+// Gastos extra de merch que NO consumen stock (transporte, envío, etc.).
+export const MERCH_EXPENSE_TYPES = [
+  'Transporte',
+  'Envio',
+  'Impresion',
+  'Almacenaje',
+  'Otro',
+] as const;
+export type MerchExpenseType = (typeof MERCH_EXPENSE_TYPES)[number];
+
+export const MERCH_EXPENSE_TYPE_COLORS: Record<string, string> = {
+  Transporte: '#0E7A6B',   // verde
+  Envio: '#4453A0',        // azul
+  Impresion: '#CA8A04',    // ámbar
+  Almacenaje: '#6D28D9',   // violeta
+  Otro: '#6B7280',         // gris
+};
+
+export interface MerchExtraExpense {
+  id: string;            // record id interno
+  name?: string;         // Nombre de Gasto
+  expenseType?: string;  // Tipo de Gasto
+  date?: string;         // Fecha (ISO)
+  occasion?: string;     // Ocasión
+  event?: string;        // Evento Específico
+  amount?: number;       // Monto
+}
+
+// =============================================================================
+// Bienestar & Salud — Exámenes médicos
+// =============================================================================
+
+export const EXAM_SEDES = [
+  'Callao',
+  'Lima Norte',
+  'Lima Sur',
+  'Lima Centro',
+  'Lima Este',
+  'Sin asignar',
+] as const;
+export type ExamSede = (typeof EXAM_SEDES)[number];
+
+export const EXAM_STATUSES = ['Sin asignar', 'Programado', 'Reprogramado'] as const;
+export type ExamStatus = (typeof EXAM_STATUSES)[number];
+
+export const EXAM_RESULTS = [
+  'Apto',
+  'Apto con observaciones',
+  'Con observaciones',
+] as const;
+export type ExamResult = (typeof EXAM_RESULTS)[number];
+
+export const EXAM_STATUS_COLORS: Record<string, string> = {
+  'Sin asignar': '#94A3B8',
+  Programado: '#00A29B',
+  Reprogramado: '#CA8A04',
+};
+export const EXAM_RESULT_COLORS: Record<string, string> = {
+  Apto: '#00A29B', // teal
+  'Apto con observaciones': '#00665F', // teal más oscuro que Apto
+  'Con observaciones': '#D14646', // rojo
+};
+
+// Precio del examen según edad (mayor de 39 años cuesta más).
+export const EXAM_PRICE_OVER_39 = 77.86;
+export const EXAM_PRICE_UNDER_39 = 62.54;
+
+export interface MedicalExam {
+  id: string;               // record id interno
+  collaboratorId: string;   // ref al colaborador (record id)
+  collaboratorName: string; // snapshot del nombre
+  examDate?: string;        // Fecha de Examen (ISO)
+  sede?: string;            // Sede
+  status?: string;          // Status
+  resultado?: string;       // Resultado
+}
+
 export interface ActivityLog {
   id: string;
   userId: string;
@@ -268,4 +471,84 @@ export interface DashboardKPI {
 export interface SeriesPoint {
   label: string;
   value: number;
+}
+
+// =============================================================================
+// Pagos — pagos fijos mensuales (servicios, alquileres, seguros, etc.)
+// =============================================================================
+
+export const PAYMENT_STATUSES = [
+  'Pendiente',
+  'Programado',
+  'Parcial',
+  'Automatico',
+  'Listo',
+  'No se realizo',
+] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+export const PAYMENT_STATUS_COLORS: Record<string, string> = {
+  Pendiente: '#D14646', // rojo
+  Programado: '#7C3AED', // morado
+  Parcial: '#2563EB', // azul
+  Automatico: '#0891B2', // cian
+  Listo: '#22C55E', // verde claro
+  'No se realizo': '#94A3B8', // gris
+};
+
+// 12 meses (keys estables + label corto para columnas/Airtable + nombre completo).
+export const PAYMENT_MONTHS = [
+  { key: 'ene', label: 'Ene', full: 'Enero' },
+  { key: 'feb', label: 'Feb', full: 'Febrero' },
+  { key: 'mar', label: 'Mar', full: 'Marzo' },
+  { key: 'abr', label: 'Abr', full: 'Abril' },
+  { key: 'may', label: 'May', full: 'Mayo' },
+  { key: 'jun', label: 'Jun', full: 'Junio' },
+  { key: 'jul', label: 'Jul', full: 'Julio' },
+  { key: 'ago', label: 'Ago', full: 'Agosto' },
+  { key: 'sep', label: 'Sep', full: 'Septiembre' },
+  { key: 'oct', label: 'Oct', full: 'Octubre' },
+  { key: 'nov', label: 'Nov', full: 'Noviembre' },
+  { key: 'dic', label: 'Dic', full: 'Diciembre' },
+] as const;
+export type PaymentMonthKey = (typeof PAYMENT_MONTHS)[number]['key'];
+
+export const DEFAULT_PAYMENT_STATUS: PaymentStatus = 'Pendiente';
+
+export interface FixedPayment {
+  id: string;             // record id interno
+  name: string;           // Nombre de pago
+  provider?: string;      // Proveedor
+  partida?: string;       // Partida
+  sender?: string;        // Quien suele enviarlo
+  paymentDate?: string;   // Fecha de pago (texto libre: "12", "1-3", etc.)
+  // Estado por mes; un mes ausente se considera "Pendiente".
+  status: Record<string, PaymentStatus>;
+  // Fecha (ISO) en que se marcó "Programado" cada mes. Clave = mes.
+  scheduledAt?: Record<string, string>;
+}
+
+// RHE — Recibos por Honorarios Electrónicos (personas pagadas por honorarios).
+// Misma lógica de estado por mes que los pagos fijos.
+export interface RheEntry {
+  id: string;
+  personStatus?: string;  // Status: Activo / Cese
+  person: string;         // Persona (nombre)
+  contact?: string;       // Email / WhatsApp / referencia (segunda línea)
+  area?: string;          // Áreas
+  partida?: string;       // Partida
+  entity?: string;        // Entidad (ej. BK)
+  paymentDate?: string;   // Fecha de pago (texto libre)
+  // Estado de pago por mes; un mes ausente se considera "Pendiente".
+  status: Record<string, PaymentStatus>;
+}
+
+// Gasto puntual asociado a un evento de engagement, en un mes dado.
+export interface EngagementExpense {
+  id: string;
+  eventId: string;       // id del evento de engagement
+  eventName?: string;    // snapshot del nombre del evento
+  month: string;         // clave de mes (ene..dic, ver PAYMENT_MONTHS)
+  name: string;          // Nombre de gasto
+  amount?: number;       // Monto gastado
 }

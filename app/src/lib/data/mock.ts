@@ -4,7 +4,16 @@ import type {
   Candidate,
   CatalogItem,
   CatalogType,
+  EngagementEvent,
+  EngagementExpense,
+  EngagementParticipant,
   Ingreso,
+  FixedPayment,
+  RheEntry,
+  MedicalExam,
+  MerchExtraExpense,
+  MerchUsage,
+  PurchaseOrder,
   Notification,
   ReviewTime,
   SalaryRange,
@@ -15,6 +24,65 @@ import type {
   Vacancy,
 } from '@/lib/types';
 import { getStore } from './store';
+import {
+  createArea as engCreateArea,
+  createEvent as engCreateEvent,
+  createParticipant as engCreateParticipant,
+  deleteArea as engDeleteArea,
+  deleteEvent as engDeleteEvent,
+  deleteParticipant as engDeleteParticipant,
+  listAreas as engListAreas,
+  listEvents as engListEvents,
+  listParticipants as engListParticipants,
+  updateArea as engUpdateArea,
+  updateEvent as engUpdateEvent,
+  updateParticipant as engUpdateParticipant,
+} from './engagement-store';
+import {
+  createEngExpense,
+  deleteEngExpense,
+  listEngExpenses,
+  updateEngExpense,
+  createGastoEvento,
+  deleteGastoEvento,
+  listGastoEventos,
+} from './engagement-expenses-store';
+import {
+  createExpense as merchCreateExpense,
+  createOrder as merchCreateOrder,
+  createUsage as merchCreateUsage,
+  deleteExpense as merchDeleteExpense,
+  deleteOrder as merchDeleteOrder,
+  deleteUsage as merchDeleteUsage,
+  listExpenses as merchListExpenses,
+  listOrders as merchListOrders,
+  listUsages as merchListUsages,
+  updateExpense as merchUpdateExpense,
+  updateOrder as merchUpdateOrder,
+  updateUsage as merchUpdateUsage,
+} from './merch-store';
+import {
+  createExam as bienCreateExam,
+  deleteExam as bienDeleteExam,
+  listExams as bienListExams,
+  updateExam as bienUpdateExam,
+} from './bienestar-store';
+import {
+  createPayment as payCreate,
+  deletePayment as payDelete,
+  listPayments as payList,
+  updatePayment as payUpdate,
+  createRhe as rheCreate,
+  deleteRhe as rheDelete,
+  listRhe as rheList,
+  updateRhe as rheUpdate,
+} from './payments-store';
+import {
+  createProductType as ptCreate,
+  deleteProductType as ptDelete,
+  listProductTypes as ptList,
+  updateProductType as ptUpdate,
+} from './product-types-store';
 import {
   isKvAvailable,
   kvCreateUser,
@@ -439,6 +507,205 @@ export class MockRepository implements Repository {
   async deleteReviewTime(recordId: string): Promise<void> {
     const store = getStore();
     store.reviewTimes = store.reviewTimes.filter((x) => x.id !== recordId);
+  }
+
+  // ---- Engagement & Cultura ----
+  async listEngagementEvents(): Promise<EngagementEvent[]> {
+    return engListEvents();
+  }
+  async createEngagementEvent(
+    data: Omit<EngagementEvent, 'id'>,
+  ): Promise<EngagementEvent> {
+    return engCreateEvent(data);
+  }
+  async updateEngagementEvent(
+    id: string,
+    patch: Partial<Omit<EngagementEvent, 'id'>>,
+  ): Promise<EngagementEvent> {
+    return engUpdateEvent(id, patch);
+  }
+  async deleteEngagementEvent(id: string): Promise<void> {
+    return engDeleteEvent(id);
+  }
+
+  async listEngagementAreas(): Promise<CatalogItem[]> {
+    return engListAreas();
+  }
+  async createEngagementArea(name: string): Promise<CatalogItem> {
+    return engCreateArea(name);
+  }
+  async updateEngagementArea(id: string, name: string): Promise<CatalogItem> {
+    return engUpdateArea(id, name);
+  }
+  async deleteEngagementArea(id: string): Promise<void> {
+    return engDeleteArea(id);
+  }
+
+  async listEngagementParticipants(): Promise<EngagementParticipant[]> {
+    return engListParticipants();
+  }
+  async createEngagementParticipant(
+    data: Omit<EngagementParticipant, 'id'>,
+  ): Promise<EngagementParticipant> {
+    return engCreateParticipant(data);
+  }
+  async updateEngagementParticipant(
+    id: string,
+    patch: Partial<Omit<EngagementParticipant, 'id'>>,
+  ): Promise<EngagementParticipant> {
+    return engUpdateParticipant(id, patch);
+  }
+  async deleteEngagementParticipant(id: string): Promise<void> {
+    return engDeleteParticipant(id);
+  }
+
+  // ---- Engagement (eventos propios de gastos) ----
+  async listEngagementGastoEventos(): Promise<CatalogItem[]> {
+    return listGastoEventos();
+  }
+  async createEngagementGastoEvento(name: string): Promise<CatalogItem> {
+    return createGastoEvento(name);
+  }
+  async deleteEngagementGastoEvento(id: string): Promise<void> {
+    return deleteGastoEvento(id);
+  }
+
+  // ---- Engagement (gastos por evento) ----
+  async listEngagementExpenses(): Promise<EngagementExpense[]> {
+    return listEngExpenses();
+  }
+  async createEngagementExpense(
+    data: Omit<EngagementExpense, 'id'>,
+  ): Promise<EngagementExpense> {
+    return createEngExpense(data);
+  }
+  async updateEngagementExpense(
+    id: string,
+    patch: Partial<Omit<EngagementExpense, 'id'>>,
+  ): Promise<EngagementExpense> {
+    return updateEngExpense(id, patch);
+  }
+  async deleteEngagementExpense(id: string): Promise<void> {
+    return deleteEngExpense(id);
+  }
+
+  // ---- MERCH (órdenes de compra) ----
+  async listPurchaseOrders(): Promise<PurchaseOrder[]> {
+    return merchListOrders();
+  }
+  async createPurchaseOrder(
+    data: Omit<PurchaseOrder, 'id'>,
+  ): Promise<PurchaseOrder> {
+    return merchCreateOrder(data);
+  }
+  async updatePurchaseOrder(
+    id: string,
+    patch: Partial<Omit<PurchaseOrder, 'id'>>,
+  ): Promise<PurchaseOrder> {
+    return merchUpdateOrder(id, patch);
+  }
+  async deletePurchaseOrder(id: string): Promise<void> {
+    return merchDeleteOrder(id);
+  }
+
+  async listMerchUsages(): Promise<MerchUsage[]> {
+    return merchListUsages();
+  }
+  async createMerchUsage(data: Omit<MerchUsage, 'id'>): Promise<MerchUsage> {
+    return merchCreateUsage(data);
+  }
+  async updateMerchUsage(
+    id: string,
+    patch: Partial<Omit<MerchUsage, 'id'>>,
+  ): Promise<MerchUsage> {
+    return merchUpdateUsage(id, patch);
+  }
+  async deleteMerchUsage(id: string): Promise<void> {
+    return merchDeleteUsage(id);
+  }
+
+  // ---- MERCH (gastos extra) ----
+  async listMerchExtraExpenses(): Promise<MerchExtraExpense[]> {
+    return merchListExpenses();
+  }
+  async createMerchExtraExpense(
+    data: Omit<MerchExtraExpense, 'id'>,
+  ): Promise<MerchExtraExpense> {
+    return merchCreateExpense(data);
+  }
+  async updateMerchExtraExpense(
+    id: string,
+    patch: Partial<Omit<MerchExtraExpense, 'id'>>,
+  ): Promise<MerchExtraExpense> {
+    return merchUpdateExpense(id, patch);
+  }
+  async deleteMerchExtraExpense(id: string): Promise<void> {
+    return merchDeleteExpense(id);
+  }
+
+  // ---- Tipo de producto (catálogo) ----
+  async listMerchProductTypes(): Promise<CatalogItem[]> {
+    return ptList();
+  }
+  async createMerchProductType(name: string): Promise<CatalogItem> {
+    return ptCreate(name);
+  }
+  async updateMerchProductType(id: string, name: string): Promise<CatalogItem> {
+    return ptUpdate(id, name);
+  }
+  async deleteMerchProductType(id: string): Promise<void> {
+    return ptDelete(id);
+  }
+
+  // ---- Pagos fijos ----
+  async listFixedPayments(): Promise<FixedPayment[]> {
+    return payList();
+  }
+  async createFixedPayment(data: Omit<FixedPayment, 'id'>): Promise<FixedPayment> {
+    return payCreate(data);
+  }
+  async updateFixedPayment(
+    id: string,
+    patch: Partial<Omit<FixedPayment, 'id'>>,
+  ): Promise<FixedPayment> {
+    return payUpdate(id, patch);
+  }
+  async deleteFixedPayment(id: string): Promise<void> {
+    return payDelete(id);
+  }
+
+  // ---- RHE (recibos por honorarios) ----
+  async listRheEntries(): Promise<RheEntry[]> {
+    return rheList();
+  }
+  async createRheEntry(data: Omit<RheEntry, 'id'>): Promise<RheEntry> {
+    return rheCreate(data);
+  }
+  async updateRheEntry(
+    id: string,
+    patch: Partial<Omit<RheEntry, 'id'>>,
+  ): Promise<RheEntry> {
+    return rheUpdate(id, patch);
+  }
+  async deleteRheEntry(id: string): Promise<void> {
+    return rheDelete(id);
+  }
+
+  // ---- Bienestar & Salud (exámenes médicos) ----
+  async listMedicalExams(): Promise<MedicalExam[]> {
+    return bienListExams();
+  }
+  async createMedicalExam(data: Omit<MedicalExam, 'id'>): Promise<MedicalExam> {
+    return bienCreateExam(data);
+  }
+  async updateMedicalExam(
+    id: string,
+    patch: Partial<Omit<MedicalExam, 'id'>>,
+  ): Promise<MedicalExam> {
+    return bienUpdateExam(id, patch);
+  }
+  async deleteMedicalExam(id: string): Promise<void> {
+    return bienDeleteExam(id);
   }
 
   // ---- Catalogos maestros ----

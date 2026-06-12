@@ -7,7 +7,16 @@ import type {
   Candidate,
   CatalogItem,
   CatalogType,
+  EngagementEvent,
+  EngagementExpense,
+  EngagementParticipant,
+  FixedPayment,
+  RheEntry,
   Ingreso,
+  MedicalExam,
+  MerchExtraExpense,
+  MerchUsage,
+  PurchaseOrder,
   Notification,
   ReviewTime,
   SalaryRange,
@@ -102,6 +111,106 @@ export interface Repository {
   createReviewTime(data: Omit<ReviewTime, 'id'>): Promise<ReviewTime>;
   updateReviewTime(recordId: string, patch: Partial<ReviewTime>): Promise<ReviewTime>;
   deleteReviewTime(recordId: string): Promise<void>;
+
+  // Engagement & Cultura — eventos + participación (persistido fuera de Airtable)
+  listEngagementEvents(): Promise<EngagementEvent[]>;
+  createEngagementEvent(data: Omit<EngagementEvent, 'id'>): Promise<EngagementEvent>;
+  updateEngagementEvent(
+    id: string,
+    patch: Partial<Omit<EngagementEvent, 'id'>>,
+  ): Promise<EngagementEvent>;
+  deleteEngagementEvent(id: string): Promise<void>;
+
+  // Áreas de engagement (catálogo editable, persistido fuera de Airtable)
+  listEngagementAreas(): Promise<CatalogItem[]>;
+  createEngagementArea(name: string): Promise<CatalogItem>;
+  updateEngagementArea(id: string, name: string): Promise<CatalogItem>;
+  deleteEngagementArea(id: string): Promise<void>;
+
+  // Eventos propios del módulo de gastos de engagement (catálogo)
+  listEngagementGastoEventos(): Promise<CatalogItem[]>;
+  createEngagementGastoEvento(name: string): Promise<CatalogItem>;
+  deleteEngagementGastoEvento(id: string): Promise<void>;
+
+  // Gastos por evento de engagement
+  listEngagementExpenses(): Promise<EngagementExpense[]>;
+  createEngagementExpense(data: Omit<EngagementExpense, 'id'>): Promise<EngagementExpense>;
+  updateEngagementExpense(
+    id: string,
+    patch: Partial<Omit<EngagementExpense, 'id'>>,
+  ): Promise<EngagementExpense>;
+  deleteEngagementExpense(id: string): Promise<void>;
+
+  listEngagementParticipants(): Promise<EngagementParticipant[]>;
+  createEngagementParticipant(
+    data: Omit<EngagementParticipant, 'id'>,
+  ): Promise<EngagementParticipant>;
+  updateEngagementParticipant(
+    id: string,
+    patch: Partial<Omit<EngagementParticipant, 'id'>>,
+  ): Promise<EngagementParticipant>;
+  deleteEngagementParticipant(id: string): Promise<void>;
+
+  // MERCH — órdenes de compra (persistido fuera de Airtable)
+  listPurchaseOrders(): Promise<PurchaseOrder[]>;
+  createPurchaseOrder(data: Omit<PurchaseOrder, 'id'>): Promise<PurchaseOrder>;
+  updatePurchaseOrder(
+    id: string,
+    patch: Partial<Omit<PurchaseOrder, 'id'>>,
+  ): Promise<PurchaseOrder>;
+  deletePurchaseOrder(id: string): Promise<void>;
+
+  listMerchUsages(): Promise<MerchUsage[]>;
+  createMerchUsage(data: Omit<MerchUsage, 'id'>): Promise<MerchUsage>;
+  updateMerchUsage(
+    id: string,
+    patch: Partial<Omit<MerchUsage, 'id'>>,
+  ): Promise<MerchUsage>;
+  deleteMerchUsage(id: string): Promise<void>;
+
+  // MERCH — gastos extra (no consumen stock: transporte, envío, etc.)
+  listMerchExtraExpenses(): Promise<MerchExtraExpense[]>;
+  createMerchExtraExpense(
+    data: Omit<MerchExtraExpense, 'id'>,
+  ): Promise<MerchExtraExpense>;
+  updateMerchExtraExpense(
+    id: string,
+    patch: Partial<Omit<MerchExtraExpense, 'id'>>,
+  ): Promise<MerchExtraExpense>;
+  deleteMerchExtraExpense(id: string): Promise<void>;
+
+  // Tipo de producto (catálogo editable de Merch)
+  listMerchProductTypes(): Promise<CatalogItem[]>;
+  createMerchProductType(name: string): Promise<CatalogItem>;
+  updateMerchProductType(id: string, name: string): Promise<CatalogItem>;
+  deleteMerchProductType(id: string): Promise<void>;
+
+  // Pagos fijos mensuales
+  listFixedPayments(): Promise<FixedPayment[]>;
+  createFixedPayment(data: Omit<FixedPayment, 'id'>): Promise<FixedPayment>;
+  updateFixedPayment(
+    id: string,
+    patch: Partial<Omit<FixedPayment, 'id'>>,
+  ): Promise<FixedPayment>;
+  deleteFixedPayment(id: string): Promise<void>;
+
+  // RHE — recibos por honorarios
+  listRheEntries(): Promise<RheEntry[]>;
+  createRheEntry(data: Omit<RheEntry, 'id'>): Promise<RheEntry>;
+  updateRheEntry(
+    id: string,
+    patch: Partial<Omit<RheEntry, 'id'>>,
+  ): Promise<RheEntry>;
+  deleteRheEntry(id: string): Promise<void>;
+
+  // Bienestar & Salud — exámenes médicos (persistido fuera de Airtable en mock)
+  listMedicalExams(): Promise<MedicalExam[]>;
+  createMedicalExam(data: Omit<MedicalExam, 'id'>): Promise<MedicalExam>;
+  updateMedicalExam(
+    id: string,
+    patch: Partial<Omit<MedicalExam, 'id'>>,
+  ): Promise<MedicalExam>;
+  deleteMedicalExam(id: string): Promise<void>;
 
   // Catalogos maestros (Seniorities, Hiring Managers, Reclutadores)
   listCatalog(type: CatalogType): Promise<CatalogItem[]>;
